@@ -113,27 +113,6 @@ func (s *DB) InsertSamples(ctx context.Context, samples []Sample) error {
 	return tx.Commit()
 }
 
-func (s *DB) SamplesSince(ctx context.Context, probe string, since int64) ([]Sample, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT ts, probe, metric, value, labels FROM samples WHERE probe = ? AND ts >= ? ORDER BY ts`,
-		probe, since)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Sample
-	for rows.Next() {
-		var smp Sample
-		var labelsJSON string
-		if err := rows.Scan(&smp.Ts, &smp.Probe, &smp.Metric, &smp.Value, &labelsJSON); err != nil {
-			return nil, err
-		}
-		_ = json.Unmarshal([]byte(labelsJSON), &smp.Labels)
-		out = append(out, smp)
-	}
-	return out, rows.Err()
-}
-
 func (s *DB) SamplesRange(ctx context.Context, probe string, from, to int64) ([]Sample, error) {
 	q := `SELECT ts, probe, metric, value, labels FROM samples WHERE ts >= ? AND ts <= ?`
 	args := []any{from, to}
@@ -372,22 +351,6 @@ func (s *DB) ListIncidents(ctx context.Context, limit int) ([]Incident, error) {
 		out = append(out, inc)
 	}
 	return out, rows.Err()
-}
-
-func (s *DB) SetMeta(ctx context.Context, key, value string) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO meta (key, value) VALUES (?, ?)
-		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
-	return err
-}
-
-func (s *DB) GetMeta(ctx context.Context, key string) (string, error) {
-	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&v)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
-	return v, err
 }
 
 func (s *DB) FirstSampleTime(ctx context.Context) (int64, error) {
