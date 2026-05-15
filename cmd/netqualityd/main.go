@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/ebastos/netquality/internal/api"
 	"github.com/ebastos/netquality/internal/config"
@@ -59,8 +60,11 @@ func main() {
 	engine := eval.NewEngine(cfg, db)
 	srv := api.New(cfg, db, engine)
 	httpSrv := &http.Server{
-		Addr:    cfg.Listen,
-		Handler: srv.Handler(),
+		Addr:              cfg.Listen,
+		Handler:           srv.Handler(),
+		ReadHeaderTimeout: 10 * time.Second, // Mitigates Slowloris (G112 / CWE-400)
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {
