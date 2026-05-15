@@ -222,44 +222,57 @@ func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates 
 	}
 
 	bad := overall == StateDegraded || overall == StateDown
-	if bad && active == nil {
-		detailJSON, _ := json.Marshal(map[string]any{
-			"dimensions": dimStates,
-			"detail":     detail,
-			"opened_at":  store.FormatTS(now),
-		})
-		_, err = e.db.OpenIncident(ctx, now, overall, string(detailJSON))
+
+	switch {
+	case bad && active == nil:
+		return e.openIncident(ctx, overall, dimStates, detail, now)
+	case !bad && active != nil:
+		return e.closeIncident(ctx, active, dimStates, detail, now, true)
+	case bad && active != nil && Rank(overall) > Rank(active.OverallState):
+		return e.escalateIncident(ctx, active, overall, dimStates, detail, now)
+	default:
+		return nil
+	}
+}
+
+func (e *Engine) openIncident(ctx context.Context, overall string, dimStates map[string]string, detail map[string]map[string]any, now int64) error {
+	payload, _ := json.Marshal(map[string]any{
+		"dimensions": dimStates,
+		"detail":     detail,
+		"opened_at":  store.FormatTS(now),
+	})
+	_, err := e.db.OpenIncident(ctx, now, overall, string(payload))
+	return err
+}
+
+func (e *Engine) closeIncident(ctx context.Context, active *store.Incident, dimStates map[string]string, detail map[string]map[string]any, now int64, resolved bool) error {
+	payload, _ := json.Marshal(map[string]any{
+		"dimensions": dimStates,
+		"detail":     detail,
+		"closed_at":  store.FormatTS(now),
+		"resolved":   resolved,
+	})
+	return e.db.CloseIncident(ctx, active.ID, now, string(payload))
+}
+
+func (e *Engine) escalateIncident(ctx context.Context, active *store.Incident, overall string, dimStates map[string]string, detail map[string]map[string]any, now int64) error {
+	closePayload, _ := json.Marshal(map[string]any{
+		"dimensions": dimStates,
+		"detail":     detail,
+		"escalated":  store.FormatTS(now),
+		"new_state":  overall,
+	})
+	if err := e.db.CloseIncident(ctx, active.ID, now, string(closePayload)); err != nil {
 		return err
 	}
-	if !bad && active != nil {
-		detailJSON, _ := json.Marshal(map[string]any{
-			"dimensions": dimStates,
-			"detail":     detail,
-			"closed_at":  store.FormatTS(now),
-			"resolved":   true,
-		})
-		return e.db.CloseIncident(ctx, active.ID, now, string(detailJSON))
-	}
-	if bad && active != nil && Rank(overall) > Rank(active.OverallState) {
-		closeDetail, _ := json.Marshal(map[string]any{
-			"dimensions": dimStates,
-			"detail":     detail,
-			"escalated":  store.FormatTS(now),
-			"new_state":  overall,
-		})
-		if err := e.db.CloseIncident(ctx, active.ID, now, string(closeDetail)); err != nil {
-			return err
-		}
-		openDetail, _ := json.Marshal(map[string]any{
-			"dimensions":     dimStates,
-			"detail":         detail,
-			"opened_at":      store.FormatTS(now),
-			"escalated_from": active.ID,
-		})
-		_, err = e.db.OpenIncident(ctx, now, overall, string(openDetail))
-		return err
-	}
-	return nil
+	openPayload, _ := json.Marshal(map[string]any{
+		"dimensions":     dimStates,
+		"detail":         detail,
+		"opened_at":      store.FormatTS(now),
+		"escalated_from": active.ID,
+	})
+	_, err := e.db.OpenIncident(ctx, now, overall, string(openPayload))
+	return err
 }
 
 // StateMachine applies hysteresis/debounce to proposed states.
