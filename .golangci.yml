@@ -24,14 +24,4 @@ linters:
 
 linters-settings:
   staticcheck:
-    # SA1019 = "package is deprecated". We have one use of the unmaintained
-    # go-ping/ping for raw ICMP. Exclude only for that file so the check
-    # remains active for any new code.
     checks: ["all"]
-
-issues:
-  exclude-rules:
-    - path: 'internal/probe/icmp\.go'
-      linters:
-        - staticcheck
-      text: "SA1019: .* is deprecated"

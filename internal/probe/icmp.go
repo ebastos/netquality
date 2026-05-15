@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/go-ping/ping"
+	probing "github.com/prometheus-community/pro-bing"
 )
 
 type ICMPResult struct {
@@ -17,7 +17,7 @@ type ICMPResult struct {
 }
 
 func ICMPProbe(ctx context.Context, host string, count int, timeout time.Duration) (ICMPResult, error) {
-	pinger, err := ping.NewPinger(host)
+	pinger, err := probing.NewPinger(host)
 	if err != nil {
 		return ICMPResult{}, err
 	}
@@ -27,10 +27,10 @@ func ICMPProbe(ctx context.Context, host string, count int, timeout time.Duratio
 
 	var res ICMPResult
 	done := make(chan struct{})
-	pinger.OnRecv = func(pkt *ping.Packet) {
+	pinger.OnRecv = func(pkt *probing.Packet) {
 		_ = pkt
 	}
-	pinger.OnFinish = func(stats *ping.Statistics) {
+	pinger.OnFinish = func(stats *probing.Statistics) {
 		res.OK = stats.PacketsRecv > 0 || stats.PacketLoss < 100
 		res.LossPct = stats.PacketLoss
 		res.LatencyMs = float64(stats.AvgRtt.Milliseconds())
