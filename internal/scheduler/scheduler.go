@@ -12,6 +12,7 @@ import (
 	"github.com/ebastos/netquality/internal/store"
 )
 
+// Scheduler owns the main probe loop, rollup generation, retention pruning, and baseline recomputation.
 type Scheduler struct {
 	cfg    *config.Config
 	db     *store.DB
@@ -19,6 +20,7 @@ type Scheduler struct {
 	engine *eval.Engine
 }
 
+// New wires the scheduler with its dependencies (runner for probes, engine for evaluation).
 func New(cfg *config.Config, db *store.DB, runner *probe.Runner) *Scheduler {
 	return &Scheduler{
 		cfg:    cfg,
@@ -28,6 +30,7 @@ func New(cfg *config.Config, db *store.DB, runner *probe.Runner) *Scheduler {
 	}
 }
 
+// Run starts the scheduler and blocks until the context is cancelled.
 func (s *Scheduler) Run(ctx context.Context) error {
 	baseline.StartBackground(ctx, s.cfg, s.db)
 	go s.rollupLoop(ctx)
