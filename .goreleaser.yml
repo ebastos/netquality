@@ -72,13 +72,11 @@ release:
 
     See `checksums.txt` for SHA256 sums.
 
-    ## Installation (Raspberry Pi)
+    ## Installation
 
-    Download the matching artifact for your Pi OS:
-    - 32-bit (armv7l): `netqualityd_0.1.0_linux_armv7.tar.gz`
-    - 64-bit (aarch64): `netqualityd_0.1.0_linux_arm64.tar.gz`
+    Download the matching archive for your platform from the release assets (e.g. `netqualityd_*_linux_arm64.tar.gz`).
 
-    See the [README](https://github.com/ebastos/netquality#readme) for full setup and `setcap` instructions.
+    See the [README](https://github.com/ebastos/netquality#readme) for platform mapping, `setcap` instructions, and systemd setup.
 
 snapshot:
   name_template: "{{ incpatch .Version }}-next"

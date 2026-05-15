@@ -14,27 +14,44 @@ Single-binary home internet quality monitor for Linux (Raspberry Pi). Measures g
 - **Incidents** — append-only records with JSON export
 - **Web UI** — embedded dashboard on configurable listen address
 
-## Quick start (Raspberry Pi)
+## Installation
 
-### Pre-built binaries (recommended)
+Netquality is distributed as a single static binary. Choose the method that fits your environment.
 
-1. Go to the [Releases](https://github.com/ebastos/netquality/releases) page and download the archive for your platform:
-   - Linux arm64 (64-bit Pi OS / aarch64): `netqualityd_0.1.0_linux_arm64.tar.gz`
-   - Linux armv7 (32-bit Pi OS / armv7l): `netqualityd_0.1.0_linux_armv7.tar.gz`
-   - macOS Apple Silicon: `netqualityd_0.1.0_darwin_arm64.tar.gz`
-   - macOS Intel: `netqualityd_0.1.0_darwin_amd64.tar.gz`
-   - Linux amd64 / x86_64: `netqualityd_0.1.0_linux_amd64.tar.gz`
-   - Windows: `netqualityd_0.1.0_windows_amd64.zip`
+### Pre-built binaries (recommended for Raspberry Pi and most users)
 
-2. Extract and install:
+1. Go to the **[latest release](https://github.com/ebastos/netquality/releases/latest)** page.
+
+2. Download the archive for your platform. The table below maps common `uname -m` output to the correct file:
+
+   | `uname -m` output      | Platform                              | Archive to download                          |
+   |------------------------|---------------------------------------|----------------------------------------------|
+   | `aarch64`, `arm64`     | Linux 64-bit (Raspberry Pi 4/5)       | `netqualityd_*_linux_arm64.tar.gz`           |
+   | `armv7l`               | Linux 32-bit (Raspberry Pi 3/4)       | `netqualityd_*_linux_armv7.tar.gz`           |
+   | `x86_64`               | Linux amd64 / x86_64                  | `netqualityd_*_linux_amd64.tar.gz`           |
+   | `arm64`                | macOS Apple Silicon                   | `netqualityd_*_darwin_arm64.tar.gz`          |
+   | `x86_64`               | macOS Intel                           | `netqualityd_*_darwin_amd64.tar.gz`          |
+   | `amd64`                | Windows                               | `netqualityd_*_windows_amd64.zip`            |
+
+3. Extract and install:
+
+   ```bash
+   tar -xzf netqualityd_*_linux_arm64.tar.gz   # adjust the pattern to match your download
+   sudo install -m 0755 netqualityd /usr/local/bin/
+   sudo setcap cap_net_raw+ep /usr/local/bin/netqualityd   # required for the gateway probe
+   ```
+
+4. Continue with the configuration and systemd unit below.
+
+**Verify the download (recommended):** Compare the SHA256 of the archive you downloaded against the `checksums.txt` file published with the release.
+
+### Go install (for Go users)
+
+Requires Go 1.23 or newer. The binary is installed to `$GOBIN` (or `$GOPATH/bin`):
 
 ```bash
-tar -xzf netqualityd_0.1.0_linux_arm64.tar.gz   # or the matching file
-sudo install -m 0755 netqualityd /usr/local/bin/
-sudo setcap cap_net_raw+ep /usr/local/bin/netqualityd   # required for gateway ICMP
+go install github.com/ebastos/netquality/cmd/netqualityd@latest
 ```
-
-3. Continue with configuration and systemd setup below.
 
 ### Build from source
 
@@ -59,7 +76,7 @@ sudo systemctl enable --now netqualityd
 
 Open `http://127.0.0.1:8080` (or your configured `listen` address).
 
-### Cross-compile from another machine
+#### Cross-compile from another machine
 
 ```bash
 make build-pi   # builds both armv7 and arm64 binaries
@@ -72,7 +89,6 @@ uname -m
 # armv7l  → use bin/netqualityd-linux-armv7   (32-bit Raspberry Pi OS)
 # aarch64 → use bin/netqualityd-linux-arm64   (64-bit Raspberry Pi OS)
 ```
-
 
 `Exec format error` means the binary architecture does not match the OS (e.g. arm64 binary on 32-bit `armv7l`).
 
