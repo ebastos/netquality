@@ -3,7 +3,6 @@ package eval
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -418,13 +417,4 @@ func (e *Engine) BaselineModeLabel(ctx context.Context) string {
 		return "baseline_active"
 	}
 	return "learning"
-}
-
-func SnapshotStatesJSON(states []store.DimensionState) string {
-	b, _ := json.Marshal(states)
-	return string(b)
-}
-
-func FormatEvalError(err error) string {
-	return fmt.Sprintf("eval: %v", err)
 }
