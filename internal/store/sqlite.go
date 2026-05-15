@@ -16,6 +16,7 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+// Sample is a single measurement for a probe/metric at a point in time.
 type Sample struct {
 	Ts     int64             `json:"ts"`
 	Probe  string            `json:"probe"`
@@ -24,6 +25,7 @@ type Sample struct {
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
+// Rollup5m is a 5-minute aggregate (min/max/avg/p95) for a probe/metric bucket.
 type Rollup5m struct {
 	BucketTs int64   `json:"bucket_ts"`
 	Probe    string  `json:"probe"`
@@ -35,6 +37,7 @@ type Rollup5m struct {
 	Count    int64   `json:"count"`
 }
 
+// Baseline holds the learned P50/P95 values for a probe/metric at a specific hour of the week.
 type Baseline struct {
 	Probe      string
 	Metric     string
@@ -44,6 +47,7 @@ type Baseline struct {
 	UpdatedAt  int64
 }
 
+// DimensionState captures the current health state of one dimension (gateway, dns, path probe, or overall).
 type DimensionState struct {
 	Dimension string         `json:"dimension"`
 	State     string         `json:"state"`
@@ -51,6 +55,7 @@ type DimensionState struct {
 	Detail    map[string]any `json:"detail,omitempty"`
 }
 
+// Incident represents a period when overall health was not OK (degraded or down).
 type Incident struct {
 	ID           int64  `json:"id"`
 	StartTs      int64  `json:"start_ts"`
@@ -59,10 +64,12 @@ type Incident struct {
 	DetailJSON   string `json:"detail_json,omitempty"`
 }
 
+// DB is the SQLite-backed persistence layer for samples, rollups, baselines, states, and incidents.
 type DB struct {
 	db *sql.DB
 }
 
+// Open opens (or creates) the database at the given path and runs migrations.
 func Open(path string) (*DB, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -250,6 +257,7 @@ func (s *DB) BaselineSamples(ctx context.Context, since int64) ([]Sample, error)
 	return out, rows.Err()
 }
 
+// SetState upserts the current state for a dimension (used by the debounced StateMachine).
 func (s *DB) SetState(ctx context.Context, dim, state string, since int64, detail map[string]any) error {
 	detailJSON, _ := json.Marshal(detail)
 	if detailJSON == nil {
@@ -262,6 +270,7 @@ func (s *DB) SetState(ctx context.Context, dim, state string, since int64, detai
 	return err
 }
 
+// GetStates returns the latest known state for every dimension.
 func (s *DB) GetStates(ctx context.Context) ([]DimensionState, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT dimension, state, since_ts, detail FROM states ORDER BY dimension`)
 	if err != nil {
@@ -281,6 +290,7 @@ func (s *DB) GetStates(ctx context.Context) ([]DimensionState, error) {
 	return out, rows.Err()
 }
 
+// OpenIncident creates a new incident and returns its ID.
 func (s *DB) OpenIncident(ctx context.Context, startTs int64, overallState, detailJSON string) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO incidents (start_ts, overall_state, detail_json) VALUES (?, ?, ?)`,
@@ -291,6 +301,7 @@ func (s *DB) OpenIncident(ctx context.Context, startTs int64, overallState, deta
 	return res.LastInsertId()
 }
 
+// CloseIncident marks an incident as resolved with an end timestamp.
 func (s *DB) CloseIncident(ctx context.Context, id, endTs int64, detailJSON string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE incidents SET end_ts = ?, detail_json = ? WHERE id = ? AND end_ts IS NULL`,
@@ -298,6 +309,7 @@ func (s *DB) CloseIncident(ctx context.Context, id, endTs int64, detailJSON stri
 	return err
 }
 
+// ActiveIncident returns the currently open incident, if any.
 func (s *DB) ActiveIncident(ctx context.Context) (*Incident, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, start_ts, end_ts, overall_state, detail_json FROM incidents WHERE end_ts IS NULL ORDER BY id DESC LIMIT 1`)
@@ -326,6 +338,7 @@ func scanIncident(row *sql.Row) (*Incident, error) {
 	return &inc, nil
 }
 
+// ListIncidents returns the most recent incidents (newest first), up to limit.
 func (s *DB) ListIncidents(ctx context.Context, limit int) ([]Incident, error) {
 	if limit <= 0 {
 		limit = 50
@@ -435,7 +448,7 @@ func FormatTS(ts int64) string {
 	return time.Unix(ts, 0).UTC().Format(time.RFC3339)
 }
 
-// ExportBundle is the ISP evidence export structure.
+// ExportBundle is the complete snapshot returned by the incident export API (incident + states + samples + rollups).
 type ExportBundle struct {
 	DeviceID   string           `json:"device_id"`
 	Incident   Incident         `json:"incident"`
@@ -446,6 +459,7 @@ type ExportBundle struct {
 	Extra      map[string]any   `json:"extra,omitempty"`
 }
 
+// BuildExport assembles the full export bundle for a given incident (used by /incidents/{id}/export).
 func (s *DB) BuildExport(ctx context.Context, deviceID string, inc *Incident) (*ExportBundle, error) {
 	if inc == nil {
 		return nil, fmt.Errorf("incident is nil")
