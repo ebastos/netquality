@@ -16,6 +16,28 @@ Single-binary home internet quality monitor for Linux (Raspberry Pi). Measures g
 
 ## Quick start (Raspberry Pi)
 
+### Pre-built binaries (recommended)
+
+1. Go to the [Releases](https://github.com/ebastos/netquality/releases) page and download the archive for your platform:
+   - Linux arm64 (64-bit Pi OS / aarch64): `netqualityd_0.1.0_linux_arm64.tar.gz`
+   - Linux armv7 (32-bit Pi OS / armv7l): `netqualityd_0.1.0_linux_armv7.tar.gz`
+   - macOS Apple Silicon: `netqualityd_0.1.0_darwin_arm64.tar.gz`
+   - macOS Intel: `netqualityd_0.1.0_darwin_amd64.tar.gz`
+   - Linux amd64 / x86_64: `netqualityd_0.1.0_linux_amd64.tar.gz`
+   - Windows: `netqualityd_0.1.0_windows_amd64.zip`
+
+2. Extract and install:
+
+```bash
+tar -xzf netqualityd_0.1.0_linux_arm64.tar.gz   # or the matching file
+sudo install -m 0755 netqualityd /usr/local/bin/
+sudo setcap cap_net_raw+ep /usr/local/bin/netqualityd   # required for gateway ICMP
+```
+
+3. Continue with configuration and systemd setup below.
+
+### Build from source
+
 ```bash
 git clone https://github.com/ebastos/netquality.git
 cd netquality

@@ -1,0 +1,84 @@
+# GoReleaser configuration for netqualityd
+# https://goreleaser.com/customization/
+version: 2
+
+project_name: netqualityd
+
+builds:
+  - id: netqualityd
+    main: ./cmd/netqualityd
+    binary: netqualityd
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - "386"
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      # Only build armv7 for Linux (most common Pi target); skip darwin/windows armv7
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+
+archives:
+  - id: default
+    # Uses GoReleaser default naming: netqualityd_0.1.0_linux_amd64.tar.gz
+    # Windows produces .zip automatically via format_overrides
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE*
+      - deploy/config.example.yaml
+      - deploy/netqualityd.service
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+release:
+  github:
+    owner: ebastos
+    name: netquality
+  draft: false
+  replace_existing_draft: true
+  mode: replace
+  header: |
+    ## Netquality {{ .Tag }}
+
+    Single-binary home network quality monitor.
+
+  footer: |
+    ## Checksums
+
+    See `checksums.txt` for SHA256 sums.
+
+    ## Installation (Raspberry Pi)
+
+    Download the matching artifact for your Pi OS:
+    - 32-bit (armv7l): `netqualityd_0.1.0_linux_armv7.tar.gz`
+    - 64-bit (aarch64): `netqualityd_0.1.0_linux_arm64.tar.gz`
+
+    See the [README](https://github.com/ebastos/netquality#readme) for full setup and `setcap` instructions.
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"

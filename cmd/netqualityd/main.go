@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,9 +19,17 @@ import (
 	"github.com/ebastos/netquality/internal/store"
 )
 
+var version = "dev"
+
 func main() {
+	showVersion := flag.Bool("version", false, "print version and exit")
 	configPath := flag.String("config", envOr("NETQUALITY_CONFIG", "/etc/netquality/config.yaml"), "path to config.yaml")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
@@ -66,6 +75,8 @@ func main() {
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+
+	slog.Info("starting", "version", version, "addr", cfg.Listen, "device", cfg.DeviceID)
 
 	go func() {
 		slog.Info("listening", "addr", cfg.Listen, "device", cfg.DeviceID)
