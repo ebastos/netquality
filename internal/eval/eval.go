@@ -71,16 +71,17 @@ func AggregateMetrics(samples []store.Sample) ProbeMetrics {
 		}
 	}
 	m.FailCount = failCount
-	if okCount > 0 && failCount == 0 {
-		m.OK = 1
-	} else if failCount > 0 && okCount == 0 {
-		m.OK = 0
-	} else if failCount > okCount {
-		m.OK = 0
-	} else {
-		m.OK = 1
-	}
+	m.OK = deriveOK(okCount, failCount)
 	return m
+}
+
+// deriveOK returns 1 if the probe is considered successful overall, 0 otherwise.
+// A probe is OK when there are no failures, or when successes >= failures.
+func deriveOK(okCount, failCount int) float64 {
+	if failCount == 0 || okCount >= failCount {
+		return 1
+	}
+	return 0
 }
 
 // classifyProbe returns the evaluation category for a probe name.
