@@ -10,6 +10,8 @@ import (
 	"github.com/ebastos/netquality/internal/store"
 )
 
+// Engine coordinates evaluation of probe samples against thresholds or learned baselines,
+// then applies the debounced StateMachine to produce stable dimension states.
 type Engine struct {
 	cfg    *config.Config
 	db     *store.DB
@@ -17,6 +19,7 @@ type Engine struct {
 	warmup bool
 }
 
+// NewEngine constructs an evaluation engine backed by the given DB and config.
 func NewEngine(cfg *config.Config, db *store.DB) *Engine {
 	return &Engine{
 		cfg: cfg,
@@ -25,6 +28,7 @@ func NewEngine(cfg *config.Config, db *store.DB) *Engine {
 	}
 }
 
+// IsWarm reports whether the system has collected enough data for baseline mode.
 func (e *Engine) IsWarm(ctx context.Context) (bool, error) {
 	first, err := e.db.FirstSampleTime(ctx)
 	if err != nil || first == 0 {
@@ -40,6 +44,7 @@ func (e *Engine) IsWarm(ctx context.Context) (bool, error) {
 	return e.warmup, nil
 }
 
+// ProbeMetrics is the reduced view of samples for a single probe used during evaluation.
 type ProbeMetrics struct {
 	LossPct   float64
 	LatencyMs float64
@@ -48,6 +53,7 @@ type ProbeMetrics struct {
 	FailCount int
 }
 
+// AggregateMetrics collapses a slice of samples for one probe into loss/latency/jitter/ok metrics.
 func AggregateMetrics(samples []store.Sample) ProbeMetrics {
 	var m ProbeMetrics
 	var okCount, failCount int
@@ -96,6 +102,7 @@ func classifyProbe(probe string) string {
 	}
 }
 
+// Evaluate runs one evaluation pass over the latest samples for all probes and updates dimension states.
 func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store.Sample) error {
 	now := store.NowUnix()
 	warm, _ := e.IsWarm(ctx)
@@ -309,7 +316,7 @@ func (e *Engine) escalateIncident(ctx context.Context, active *store.Incident, o
 	return err
 }
 
-// StateMachine applies hysteresis/debounce to proposed states.
+// StateMachine implements debounce/hysteresis for state transitions (prevents flapping).
 type StateMachine struct {
 	cfg     *config.Config
 	pending map[string]pendingTransition
@@ -321,6 +328,7 @@ type pendingTransition struct {
 	since    int64
 }
 
+// NewStateMachine creates a fresh StateMachine. State is loaded from DB on first Apply.
 func NewStateMachine(cfg *config.Config) *StateMachine {
 	return &StateMachine{
 		cfg:     cfg,
@@ -329,6 +337,7 @@ func NewStateMachine(cfg *config.Config) *StateMachine {
 	}
 }
 
+// Apply proposes a new state for a dimension and returns the (possibly debounced) final state.
 func (sm *StateMachine) Apply(ctx context.Context, db *store.DB, dim, proposed string, now int64) (string, error) {
 	if err := sm.ensureCurrent(ctx, db); err != nil {
 		return proposed, err
@@ -408,6 +417,7 @@ func (sm *StateMachine) handleImproving(dim, cur, proposed string, now int64) (s
 	return cur, nil
 }
 
+// BaselineModeLabel returns a UI-friendly string ("learning" or "baseline_active").
 func (e *Engine) BaselineModeLabel(ctx context.Context) string {
 	warm, err := e.IsWarm(ctx)
 	if err != nil {

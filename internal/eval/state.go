@@ -13,6 +13,7 @@ var stateRank = map[string]int{
 	StateDown:     2,
 }
 
+// WorstState returns the most severe state among the inputs (down > degraded > ok).
 func WorstState(states ...string) string {
 	worst := StateOK
 	maxRank := 0
@@ -29,6 +30,7 @@ func WorstState(states ...string) string {
 	return worst
 }
 
+// Rank returns the numeric severity rank for a state string (used by StateMachine debounce logic).
 func Rank(s string) int {
 	if r, ok := stateRank[s]; ok {
 		return r
