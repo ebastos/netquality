@@ -282,65 +282,81 @@ func NewStateMachine(cfg *config.Config) *StateMachine {
 }
 
 func (sm *StateMachine) Apply(ctx context.Context, db *store.DB, dim, proposed string, now int64) (string, error) {
-	states, err := db.GetStates(ctx)
-	if err != nil {
+	if err := sm.ensureCurrent(ctx, db); err != nil {
 		return proposed, err
 	}
-	cur := StateOK
-	for _, s := range states {
-		sm.current[s.Dimension] = s.State
-		if s.Dimension == dim {
-			cur = s.State
-			if cur == "" {
-				cur = StateOK
-			}
-		}
-	}
-	if _, ok := sm.current[dim]; !ok {
-		sm.current[dim] = StateOK
-		cur = StateOK
-	}
+
+	cur := sm.currentState(dim)
 
 	if proposed == cur {
 		delete(sm.pending, dim)
 		return cur, nil
 	}
 
-	// worsening: apply after debounce
 	if Rank(proposed) > Rank(cur) {
-		p, ok := sm.pending[dim]
-		if !ok || p.proposed != proposed {
-			sm.pending[dim] = pendingTransition{proposed: proposed, since: now}
-			return cur, nil
-		}
-		if now-p.since >= int64(sm.cfg.State.Debounce.Std().Seconds()) {
-			delete(sm.pending, dim)
-			sm.current[dim] = proposed
-			return proposed, nil
-		}
-		return cur, nil
+		return sm.handleWorsening(dim, cur, proposed, now)
 	}
-
-	// improving: clear degraded faster
-	clearAfter := sm.cfg.State.ClearDegradedAfter.Std()
 	if Rank(proposed) < Rank(cur) {
-		p, ok := sm.pending[dim]
-		if !ok || p.proposed != proposed {
-			sm.pending[dim] = pendingTransition{proposed: proposed, since: now}
-			return cur, nil
-		}
-		wait := sm.cfg.State.Debounce.Std()
-		if Rank(cur) == Rank(StateDegraded) && Rank(proposed) == Rank(StateOK) {
-			wait = clearAfter
-		}
-		if now-p.since >= int64(wait.Seconds()) {
-			delete(sm.pending, dim)
-			sm.current[dim] = proposed
-			return proposed, nil
-		}
+		return sm.handleImproving(dim, cur, proposed, now)
+	}
+	return cur, nil
+}
+
+// ensureCurrent refreshes the in-memory current-state cache from the DB.
+// This is called on every Apply to pick up external state changes.
+func (sm *StateMachine) ensureCurrent(ctx context.Context, db *store.DB) error {
+	states, err := db.GetStates(ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range states {
+		sm.current[s.Dimension] = s.State
+	}
+	return nil
+}
+
+// currentState returns the cached state for dim, defaulting to StateOK.
+func (sm *StateMachine) currentState(dim string) string {
+	if cur, ok := sm.current[dim]; ok && cur != "" {
+		return cur
+	}
+	sm.current[dim] = StateOK
+	return StateOK
+}
+
+// handleWorsening starts or continues a pending transition to a worse state.
+// The worse state is only returned after the configured Debounce period.
+func (sm *StateMachine) handleWorsening(dim, cur, proposed string, now int64) (string, error) {
+	p, ok := sm.pending[dim]
+	if !ok || p.proposed != proposed {
+		sm.pending[dim] = pendingTransition{proposed: proposed, since: now}
 		return cur, nil
 	}
+	if now-p.since >= int64(sm.cfg.State.Debounce.Std().Seconds()) {
+		delete(sm.pending, dim)
+		sm.current[dim] = proposed
+		return proposed, nil
+	}
+	return cur, nil
+}
 
+// handleImproving starts or continues a pending transition to a better state.
+// Degraded→OK uses ClearDegradedAfter; all other improvements use Debounce.
+func (sm *StateMachine) handleImproving(dim, cur, proposed string, now int64) (string, error) {
+	p, ok := sm.pending[dim]
+	if !ok || p.proposed != proposed {
+		sm.pending[dim] = pendingTransition{proposed: proposed, since: now}
+		return cur, nil
+	}
+	wait := sm.cfg.State.Debounce.Std()
+	if Rank(cur) == Rank(StateDegraded) && Rank(proposed) == Rank(StateOK) {
+		wait = sm.cfg.State.ClearDegradedAfter.Std()
+	}
+	if now-p.since >= int64(wait.Seconds()) {
+		delete(sm.pending, dim)
+		sm.current[dim] = proposed
+		return proposed, nil
+	}
 	return cur, nil
 }
 
