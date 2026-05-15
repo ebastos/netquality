@@ -23,6 +23,10 @@
         <a class="nav-item" data-section="history" title="History">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
         </a>
+        <!-- Analysis: the new drill-down surface (hidden by default; activated via sidebar or layer cards) -->
+        <a class="nav-item" data-section="analysis" title="Analysis" id="nav-analysis">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path><path d="M11 8v6M8 11h6"></path></svg>
+        </a>
         <a class="nav-item" data-section="settings" title="Settings">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         </a>
@@ -203,13 +207,30 @@
           <div class="modal-label">Affected layers</div>
           <div id="modal-layers" class="modal-layers"></div>
         </div>
+
+        <!-- New: human-readable trigger explanation (uses enriched thresholds from backend) -->
+        <div class="modal-section" id="modal-trigger-section">
+          <div class="modal-label">Triggering measurements</div>
+          <div id="modal-triggers" class="modal-triggers"></div>
+        </div>
+
+        <!-- Timeline extracted from the incident detail payload -->
         <div class="modal-section">
-          <div class="modal-label">Raw detail</div>
-          <pre id="modal-detail"></pre>
+          <div class="modal-label">Timeline</div>
+          <div id="modal-timeline" class="modal-timeline"></div>
+        </div>
+
+        <div class="modal-section">
+          <div class="modal-label">Technical detail</div>
+          <details class="raw-detail">
+            <summary>Show raw JSON</summary>
+            <pre id="modal-detail"></pre>
+          </details>
         </div>
       </div>
       <div class="modal-footer">
         <a id="modal-export" class="btn" href="#" download>Download JSON</a>
+        <button id="modal-view-analysis" class="btn">View in Analysis</button>
         <button id="modal-close2" class="btn-secondary">Close</button>
       </div>
     </div>

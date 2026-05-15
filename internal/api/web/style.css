@@ -393,6 +393,32 @@ html, body {
   height: 26px;
 }
 
+/* Layer card drill-down affordance */
+.layer-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+/* Analysis panel - full drill-down surface */
+.analysis-panel {
+  padding: 16px 20px 28px;
+  background: var(--bg);
+  min-height: 60vh;
+}
+#analysis-stats .card {
+  padding: 10px 12px;
+}
+#analysis-samples-table th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+#analysis-samples-table td {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Chart */
 .chart-header {
   justify-content: space-between;
@@ -631,6 +657,59 @@ pre#modal-detail {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* Enhanced incident modal sections (drill-down) */
+.modal-triggers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trigger-row {
+  background: var(--bg-elev);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.trigger-row.down { border-color: rgba(239, 68, 68, 0.4); }
+.trigger-row.degraded { border-color: rgba(234, 179, 8, 0.4); }
+.trigger-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.trig-dim { font-weight: 600; }
+.trig-proposed { color: var(--muted); font-size: 11px; }
+.trigger-metrics, .trigger-th {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.trigger-metrics span strong { color: var(--text); }
+
+.modal-timeline {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.timeline-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+.tl-label { font-weight: 600; color: var(--text); min-width: 70px; }
+.tl-ts { font-family: ui-monospace, monospace; }
+.tl-note { color: var(--accent); }
+
+.raw-detail summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-bottom: 6px;
+}
+.raw-detail[open] summary { margin-bottom: 8px; }
 .modal-footer {
   display: flex;
   gap: 8px;

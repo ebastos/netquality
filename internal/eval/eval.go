@@ -117,10 +117,14 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 			st = e.evaluatePath(ctx, probe, m, warm, hour)
 		}
 		dimStates[probe] = st
+		// Build threshold info for the metrics relevant to this probe type so that
+		// state and incident records contain enough data for good explanations.
+		threshMap := buildThresholdInfo(ctx, e, probe, classifyProbe(probe), warm, hour)
 		dimDetail[probe] = map[string]any{
-			"metrics":   m,
-			"warm":      warm,
-			"threshold": true,
+			"metrics":    m,
+			"warm":       warm,
+			"threshold":  true,
+			"thresholds": threshMap,
 		}
 	}
 
@@ -158,7 +162,7 @@ func (e *Engine) evaluateGateway(ctx context.Context, probe string, m ProbeMetri
 	if m.LossPct >= th.LossPctDown || m.OK < 1 {
 		return StateDown
 	}
-	if m.LossPct >= th.LossPctDegraded || m.LatencyMs >= lat.degraded {
+	if m.LossPct >= th.LossPctDegraded || m.LatencyMs >= lat.Degraded {
 		return StateDegraded
 	}
 	return StateOK
@@ -167,10 +171,10 @@ func (e *Engine) evaluateGateway(ctx context.Context, probe string, m ProbeMetri
 func (e *Engine) evaluateDNS(ctx context.Context, probe string, m ProbeMetrics, warm bool, hour int) string {
 	th := e.cfg.Threshold.DNS
 	lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
-	if m.OK < 1 || m.LatencyMs >= lat.down {
+	if m.OK < 1 || m.LatencyMs >= lat.Down {
 		return StateDown
 	}
-	if m.LatencyMs >= lat.degraded {
+	if m.LatencyMs >= lat.Degraded {
 		return StateDegraded
 	}
 	return StateOK
@@ -182,37 +186,68 @@ func (e *Engine) evaluatePath(ctx context.Context, probe string, m ProbeMetrics,
 	if m.FailCount >= th.FailCountDown || m.OK < 1 {
 		return StateDown
 	}
-	if m.LatencyMs >= lat.down {
+	if m.LatencyMs >= lat.Down {
 		return StateDown
 	}
-	if m.LatencyMs >= lat.degraded {
+	if m.LatencyMs >= lat.Degraded {
 		return StateDegraded
 	}
 	return StateOK
 }
 
-type threshPair struct {
-	degraded float64
-	down     float64
+// buildThresholdInfo assembles the active thresholds for the metrics that matter
+// for a given probe classification. Called during Evaluate so the map can be
+// persisted into states.detail and incidents.detail_json for drill-down UIs.
+func buildThresholdInfo(ctx context.Context, e *Engine, probe, class string, warm bool, hour int) map[string]any {
+	out := map[string]any{}
+
+	switch class {
+	case "gateway":
+		th := e.cfg.Threshold.Gateway
+		lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
+		out["latency_ms"] = thresholdInfo{Degraded: lat.Degraded, Down: lat.Down, Source: lat.Source}
+		out["loss_pct"] = thresholdInfo{Degraded: th.LossPctDegraded, Down: th.LossPctDown, Source: "config"}
+	case "dns":
+		th := e.cfg.Threshold.DNS
+		lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
+		out["latency_ms"] = thresholdInfo{Degraded: lat.Degraded, Down: lat.Down, Source: lat.Source}
+	case "path":
+		th := e.cfg.Threshold.Path
+		lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
+		out["latency_ms"] = thresholdInfo{Degraded: lat.Degraded, Down: lat.Down, Source: lat.Source}
+		out["fail_count"] = thresholdInfo{Degraded: float64(th.FailCountDown), Down: float64(th.FailCountDown), Source: "config"}
+	}
+	return out
 }
 
-func effectiveThreshold(ctx context.Context, db *store.DB, warm bool, cfg *config.Config, probe, metric string, hour int, defDeg, defDown float64, useBaseline bool) threshPair {
-	pair := threshPair{degraded: defDeg, down: defDown}
+// thresholdInfo captures the concrete values used for a decision and whether
+// they came from static config or the learned baseline. Stored in state and
+// incident detail so the UI can explain "why" a state changed.
+type thresholdInfo struct {
+	Degraded float64 `json:"degraded"`
+	Down     float64 `json:"down"`
+	Source   string  `json:"source"` // "config" or "baseline"
+}
+
+func effectiveThreshold(ctx context.Context, db *store.DB, warm bool, cfg *config.Config, probe, metric string, hour int, defDeg, defDown float64, useBaseline bool) thresholdInfo {
+	info := thresholdInfo{Degraded: defDeg, Down: defDown, Source: "config"}
 	if !warm || !useBaseline {
-		return pair
+		return info
 	}
 	bl, err := db.GetBaseline(ctx, probe, metric, hour)
 	if err != nil || bl == nil {
-		return pair
+		return info
 	}
 	anom := bl.P95 * cfg.Baseline.AnomalyMultiplier
-	if anom > pair.degraded {
-		pair.degraded = anom
+	source := "baseline"
+	if anom > info.Degraded {
+		info.Degraded = anom
 	}
-	if bl.P95*2 > pair.down {
-		pair.down = bl.P95 * 2
+	if bl.P95*2 > info.Down {
+		info.Down = bl.P95 * 2
 	}
-	return pair
+	info.Source = source
+	return info
 }
 
 func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates map[string]string, detail map[string]map[string]any, now int64) error {
