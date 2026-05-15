@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config is the root configuration loaded from YAML (or defaults).
 type Config struct {
 	DeviceID string `yaml:"device_id"`
 	Listen   string `yaml:"listen"`
@@ -98,9 +99,10 @@ type ICMPConfig struct {
 	Timeout Duration `yaml:"timeout"`
 }
 
-// Duration wraps time.Duration for YAML unmarshaling.
+// Duration is a YAML-friendly wrapper around time.Duration (parses "1m30s" etc.).
 type Duration time.Duration
 
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
 func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	var s string
 	if err := value.Decode(&s); err != nil {
@@ -114,10 +116,12 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// Std returns the underlying time.Duration (used when passing to timers, contexts, etc.).
 func (d Duration) Std() time.Duration {
 	return time.Duration(d)
 }
 
+// Load reads, parses, applies defaults, and validates the YAML config at the given path.
 func Load(path string) (*Config, error) {
 	// #nosec G304 - CWE-22 false positive. The path argument originates exclusively
 	// from the -config CLI flag or NETQUALITY_CONFIG environment variable. Both are
@@ -242,6 +246,7 @@ func (c *Config) validate() error {
 	return nil
 }
 
+// DBPath returns the full path to the SQLite database inside DataDir.
 func (c *Config) DBPath() string {
 	return c.DataDir + "/netquality.db"
 }
