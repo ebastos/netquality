@@ -759,10 +759,13 @@ function showOverviewView() {
   const panel = document.getElementById('analysis-panel');
   if (panel) panel.style.display = 'none';
 
-  // Trigger a refresh of the main dashboard when coming back
-  if (lastStates.length === 0) {
-    refresh();
-  }
+  // Return to Overview — refresh data + redraw main chart
+  refresh().then(() => {
+    const c = document.getElementById('latency-chart');
+    if (c && lastRollups.length) {
+      drawLatencyChart(c, lastRollups, lastStates, getWindowSeconds());
+    }
+  });
 }
 
 function setupTimeRange() {
