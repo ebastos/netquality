@@ -10,12 +10,14 @@ import (
 	"time"
 )
 
+// HTTPResult holds the outcome of a TCP connect or HTTP request probe.
 type HTTPResult struct {
 	LatencyMs float64
 	OK        bool
 	Status    int
 }
 
+// ProbeTarget dispatches to TCPProbe or HTTPProbe based on mode (or auto-detects from URL presence).
 func ProbeTarget(ctx context.Context, name, url, host string, port int, method, mode string, timeout time.Duration) (HTTPResult, error) {
 	mode = strings.ToLower(mode)
 	if mode == "" {
@@ -35,6 +37,7 @@ func ProbeTarget(ctx context.Context, name, url, host string, port int, method, 
 	}
 }
 
+// TCPProbe performs a TCP connect to host:port (used for path probes without a full HTTP URL).
 func TCPProbe(ctx context.Context, _, host string, port int, timeout time.Duration) (HTTPResult, error) {
 	if port == 0 {
 		port = 443
@@ -54,6 +57,7 @@ func TCPProbe(ctx context.Context, _, host string, port int, timeout time.Durati
 	return res, nil
 }
 
+// HTTPProbe performs an HTTP (or HTTPS) request and measures latency (HEAD by default).
 func HTTPProbe(ctx context.Context, rawURL, method string, timeout time.Duration) (HTTPResult, error) {
 	if method == "" {
 		method = http.MethodHead

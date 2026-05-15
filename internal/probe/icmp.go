@@ -9,6 +9,7 @@ import (
 	probing "github.com/prometheus-community/pro-bing"
 )
 
+// ICMPResult holds the outcome of a privileged ICMP echo (ping) probe to the gateway.
 type ICMPResult struct {
 	LossPct   float64
 	LatencyMs float64
@@ -16,6 +17,8 @@ type ICMPResult struct {
 	OK        bool
 }
 
+// ICMPProbe sends count ICMP Echo Requests and returns aggregate loss/latency/jitter.
+// Requires CAP_NET_RAW (or root) because it uses raw sockets via pro-bing.
 func ICMPProbe(ctx context.Context, host string, count int, timeout time.Duration) (ICMPResult, error) {
 	pinger, err := probing.NewPinger(host)
 	if err != nil {

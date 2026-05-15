@@ -7,16 +7,19 @@ import (
 	"time"
 )
 
+// DNSResult holds the outcome of a DNS lookup probe.
 type DNSResult struct {
 	LatencyMs float64
 	OK        bool
 	Resolver  string
 }
 
+// DNSProbe performs a DNS lookup using the system resolver (or the one in config).
 func DNSProbe(ctx context.Context, queryHost string, timeout time.Duration) (DNSResult, error) {
 	return DNSProbeResolver(ctx, queryHost, "", timeout)
 }
 
+// DNSProbeResolver is the lower-level variant that allows specifying an explicit resolver IP.
 func DNSProbeResolver(ctx context.Context, queryHost, resolverIP string, timeout time.Duration) (DNSResult, error) {
 	res := DNSResult{Resolver: "system"}
 	dialer := &net.Dialer{Timeout: timeout}

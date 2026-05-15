@@ -9,6 +9,7 @@ import (
 	"github.com/ebastos/netquality/internal/store"
 )
 
+// Runner orchestrates all probe types (gateway ICMP, DNS, HTTP/TCP path) on the configured schedule.
 type Runner struct {
 	cfg         *config.Config
 	gatewayHost string
@@ -16,6 +17,8 @@ type Runner struct {
 	mu          sync.Mutex
 }
 
+// NewRunner constructs a Runner from config. When gateway.host is empty and enabled,
+// it auto-detects the default route gateway (requires /proc/net/route on Linux).
 func NewRunner(cfg *config.Config) (*Runner, error) {
 	r := &Runner{cfg: cfg}
 	if cfg.Gateway.Enabled {
@@ -32,10 +35,12 @@ func NewRunner(cfg *config.Config) (*Runner, error) {
 	return r, nil
 }
 
+// GatewayHost returns the resolved gateway address (empty if gateway probing is disabled).
 func (r *Runner) GatewayHost() string {
 	return r.gatewayHost
 }
 
+// RunCycle executes one full probe cycle (gateway + DNS + path targets) and returns the collected samples.
 func (r *Runner) RunCycle(ctx context.Context) ([]store.Sample, error) {
 	r.mu.Lock()
 	r.cycle++
