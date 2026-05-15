@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Netquality</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Netquality</h1>
+    <p id="meta" class="meta"></p>
+  </header>
+
+  <section id="learning-banner" class="learning-banner hidden" aria-live="polite">
+    <h2 class="learning-title">Building your baseline</h2>
+    <p id="learning-copy" class="learning-copy"></p>
+    <div class="progress-wrap">
+      <div id="learning-progress" class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
+    <p id="learning-progress-label" class="learning-progress-label"></p>
+    <p id="learning-secondary" class="learning-secondary hidden"></p>
+  </section>
+
+  <section id="overall" class="card overall">
+    <h2>Overall</h2>
+    <div id="overall-state" class="state-badge state-unknown">—</div>
+    <p id="overall-since" class="since"></p>
+    <p id="overall-learning-note" class="since hidden"></p>
+  </section>
+
+  <section class="card">
+    <h2>Layers</h2>
+    <div id="dimensions" class="grid"></div>
+  </section>
+
+  <section class="card">
+    <h2>Last 24h (avg latency)</h2>
+    <div id="sparklines" class="sparklines"></div>
+    <p id="sparklines-empty" class="empty-state hidden"></p>
+  </section>
+
+  <section class="card">
+    <h2>Incidents</h2>
+    <table id="incidents">
+      <thead>
+        <tr><th>ID</th><th>State</th><th>Start</th><th>End</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="incidents-empty" class="empty-state hidden"></p>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>

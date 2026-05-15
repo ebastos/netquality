@@ -1,0 +1,22 @@
+[Unit]
+Description=Netquality home internet monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=netquality
+Group=netquality
+Environment=NETQUALITY_CONFIG=/etc/netquality/config.yaml
+ExecStart=/usr/local/bin/netqualityd -config /etc/netquality/config.yaml
+Restart=always
+RestartSec=5
+AmbientCapabilities=CAP_NET_RAW
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/netquality
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

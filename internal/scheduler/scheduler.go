@@ -1,0 +1,129 @@
+package scheduler
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"github.com/ebastos/netquality/internal/baseline"
+	"github.com/ebastos/netquality/internal/config"
+	"github.com/ebastos/netquality/internal/eval"
+	"github.com/ebastos/netquality/internal/probe"
+	"github.com/ebastos/netquality/internal/store"
+)
+
+type Scheduler struct {
+	cfg    *config.Config
+	db     *store.DB
+	runner *probe.Runner
+	engine *eval.Engine
+}
+
+func New(cfg *config.Config, db *store.DB, runner *probe.Runner) *Scheduler {
+	return &Scheduler{
+		cfg:    cfg,
+		db:     db,
+		runner: runner,
+		engine: eval.NewEngine(cfg, db),
+	}
+}
+
+func (s *Scheduler) Run(ctx context.Context) error {
+	baseline.StartBackground(ctx, s.cfg, s.db)
+	go s.rollupLoop(ctx)
+	go s.retentionLoop(ctx)
+
+	interval := s.cfg.Schedule.Interval.Std()
+	if s.cfg.Gateway.Enabled {
+		slog.Info("gateway probe target", "host", s.runner.GatewayHost())
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// initial cycle
+	s.runOnce(ctx)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			s.runOnce(ctx)
+		}
+	}
+}
+
+func (s *Scheduler) runOnce(ctx context.Context) {
+	samples, err := s.runner.RunCycle(ctx)
+	if err != nil {
+		slog.Error("probe cycle", "err", err)
+	}
+	if len(samples) > 0 {
+		if err := s.db.InsertSamples(ctx, samples); err != nil {
+			slog.Error("insert samples", "err", err)
+		}
+	}
+
+	window := int64(s.cfg.State.Debounce.Std().Seconds()) + 60
+	if window < 120 {
+		window = 120
+	}
+	since := store.NowUnix() - window
+	byProbe, err := s.db.RecentSamplesByProbe(ctx, since)
+	if err != nil {
+		slog.Error("recent samples", "err", err)
+		return
+	}
+	if err := s.engine.Evaluate(ctx, byProbe); err != nil {
+		slog.Error("evaluate", "err", err)
+	}
+}
+
+func (s *Scheduler) rollupLoop(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	const bucketSec = 300
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			now := store.NowUnix()
+			from := now - bucketSec*2
+			samples, err := s.db.SamplesRange(ctx, "", from, now)
+			if err != nil {
+				slog.Error("rollup samples", "err", err)
+				continue
+			}
+			for _, r := range store.BuildRollupsFromSamples(samples, bucketSec) {
+				if err := s.db.UpsertRollup(ctx, r); err != nil {
+					slog.Error("upsert rollup", "err", err)
+				}
+			}
+		}
+	}
+}
+
+func (s *Scheduler) retentionLoop(ctx context.Context) {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			now := store.NowUnix()
+			rawBefore := now - int64(s.cfg.Retention.RawDays)*86400
+			rollupBefore := now - int64(s.cfg.Retention.RollupDays)*86400
+			if err := s.db.PruneRaw(ctx, rawBefore); err != nil {
+				slog.Error("prune raw", "err", err)
+			}
+			if err := s.db.PruneRollups(ctx, rollupBefore); err != nil {
+				slog.Error("prune rollups", "err", err)
+			}
+		}
+	}
+}

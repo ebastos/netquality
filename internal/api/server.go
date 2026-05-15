@@ -1,0 +1,45 @@
+package api
+
+import (
+	"embed"
+	"io/fs"
+	"net/http"
+
+	"github.com/ebastos/netquality/internal/config"
+	"github.com/ebastos/netquality/internal/eval"
+	"github.com/ebastos/netquality/internal/store"
+)
+
+//go:embed web/*
+var webFS embed.FS
+
+type Server struct {
+	cfg    *config.Config
+	db     *store.DB
+	engine *eval.Engine
+}
+
+func New(cfg *config.Config, db *store.DB, engine *eval.Engine) *Server {
+	return &Server{cfg: cfg, db: db, engine: engine}
+}
+
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	h := &handlers{srv: s}
+
+	mux.HandleFunc("GET /api/v1/status", h.status)
+	mux.HandleFunc("GET /api/v1/incidents", h.listIncidents)
+	mux.HandleFunc("GET /api/v1/incidents/{id}", h.getIncident)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/export", h.exportIncident)
+	mux.HandleFunc("GET /api/v1/samples", h.samples)
+	mux.HandleFunc("GET /api/v1/rollups", h.rollups)
+
+	webRoot, err := fs.Sub(webFS, "web")
+	if err != nil {
+		panic(err)
+	}
+	fileServer := http.FileServer(http.FS(webRoot))
+	mux.Handle("/", fileServer)
+
+	return mux
+}

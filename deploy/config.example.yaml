@@ -1,0 +1,59 @@
+device_id: home-pi
+
+listen: "127.0.0.1:8080"
+data_dir: "/var/lib/netquality"
+
+schedule:
+  interval: 30s
+  dns_every: 1
+  http_every: 1
+
+gateway:
+  enabled: true
+  # host: "192.168.1.1"  # optional override; auto-detected from default route if omitted
+
+dns:
+  query_host: "google.com"
+  timeout: 5s
+  # resolver_ip: "192.168.1.1"  # optional explicit resolver comparison
+
+targets:
+  - name: cloudflare
+    url: "https://1.1.1.1/cdn-cgi/trace"
+    method: HEAD
+    mode: http
+  - name: google
+    url: "https://www.google.com/generate_204"
+    method: HEAD
+    mode: http
+
+icmp:
+  count: 10
+  timeout: 10s
+
+thresholds:
+  gateway:
+    loss_pct_degraded: 2
+    loss_pct_down: 10
+    latency_ms_degraded: 50
+    latency_ms_down: 200
+  dns:
+    latency_ms_degraded: 100
+    latency_ms_down: 500
+  path:
+    latency_ms_degraded: 150
+    latency_ms_down: 400
+    fail_count_down: 3
+
+state:
+  debounce: 2m
+  clear_degraded_after: 5m
+
+baseline:
+  warmup_days: 14
+  recompute_interval: 1h
+  anomaly_multiplier: 1.5
+
+retention:
+  raw_days: 7
+  rollup_days: 90
