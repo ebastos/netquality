@@ -33,7 +33,9 @@ type ScheduleConfig struct {
 
 type GatewayConfig struct {
 	Enabled bool   `yaml:"enabled"`
-	Host    string `yaml:"host"`
+	// Host is optional. When empty and Enabled is true, the gateway is auto-detected
+	// from the default route at runtime (see probe.NewRunner).
+	Host string `yaml:"host"`
 }
 
 type DNSConfig struct {
@@ -132,95 +134,96 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// setDefault assigns def to *p if *p is the zero value for T.
+func setDefault[T comparable](p *T, def T) {
+	var zero T
+	if *p == zero {
+		*p = def
+	}
+}
+
+// setDefaultPositive assigns def to *p if *p <= 0.
+// Used for counts, days, and threshold values that must be positive.
+func setDefaultPositive[T ~int | ~float64](p *T, def T) {
+	if *p <= 0 {
+		*p = def
+	}
+}
+
+// setDefaultDuration assigns def to *p if *p is zero.
+// Separate helper because Duration is a defined type (not ~time.Duration).
+func setDefaultDuration(p *Duration, def Duration) {
+	if *p == 0 {
+		*p = def
+	}
+}
+
 func (c *Config) applyDefaults() {
-	if c.DeviceID == "" {
-		c.DeviceID = "netquality-default"
-	}
-	if c.Listen == "" {
-		c.Listen = "127.0.0.1:8080"
-	}
-	if c.DataDir == "" {
-		c.DataDir = "/var/lib/netquality"
-	}
-	if c.Schedule.Interval == 0 {
-		c.Schedule.Interval = Duration(30 * time.Second)
-	}
-	if c.Schedule.DNSEvery <= 0 {
-		c.Schedule.DNSEvery = 1
-	}
-	if c.Schedule.HTTPEvery <= 0 {
-		c.Schedule.HTTPEvery = 1
-	}
-	if c.DNS.QueryHost == "" {
-		c.DNS.QueryHost = "google.com"
-	}
-	if c.DNS.Timeout == 0 {
-		c.DNS.Timeout = Duration(5 * time.Second)
-	}
-	if c.State.Debounce == 0 {
-		c.State.Debounce = Duration(2 * time.Minute)
-	}
-	if c.State.ClearDegradedAfter == 0 {
-		c.State.ClearDegradedAfter = Duration(5 * time.Minute)
-	}
-	if c.Baseline.WarmupDays <= 0 {
-		c.Baseline.WarmupDays = 14
-	}
-	if c.Baseline.RecomputeInterval == 0 {
-		c.Baseline.RecomputeInterval = Duration(time.Hour)
-	}
-	if c.Baseline.AnomalyMultiplier <= 0 {
-		c.Baseline.AnomalyMultiplier = 1.5
-	}
-	if c.Retention.RawDays <= 0 {
-		c.Retention.RawDays = 7
-	}
-	if c.Retention.RollupDays <= 0 {
-		c.Retention.RollupDays = 90
-	}
-	if c.ICMP.Count <= 0 {
-		c.ICMP.Count = 10
-	}
-	if c.ICMP.Timeout == 0 {
-		c.ICMP.Timeout = Duration(10 * time.Second)
-	}
-	// thresholds defaults
-	if c.Threshold.Gateway.LossPctDegraded == 0 {
-		c.Threshold.Gateway.LossPctDegraded = 2
-	}
-	if c.Threshold.Gateway.LossPctDown == 0 {
-		c.Threshold.Gateway.LossPctDown = 10
-	}
-	if c.Threshold.Gateway.LatencyMsDegraded == 0 {
-		c.Threshold.Gateway.LatencyMsDegraded = 50
-	}
-	if c.Threshold.Gateway.LatencyMsDown == 0 {
-		c.Threshold.Gateway.LatencyMsDown = 200
-	}
-	if c.Threshold.DNS.LatencyMsDegraded == 0 {
-		c.Threshold.DNS.LatencyMsDegraded = 100
-	}
-	if c.Threshold.DNS.LatencyMsDown == 0 {
-		c.Threshold.DNS.LatencyMsDown = 500
-	}
-	if c.Threshold.Path.LatencyMsDegraded == 0 {
-		c.Threshold.Path.LatencyMsDegraded = 150
-	}
-	if c.Threshold.Path.LatencyMsDown == 0 {
-		c.Threshold.Path.LatencyMsDown = 400
-	}
-	if c.Threshold.Path.FailCountDown <= 0 {
-		c.Threshold.Path.FailCountDown = 3
-	}
+	c.applyTopLevelDefaults()
+	c.applyScheduleDefaults()
+	c.applyDNSDefaults()
+	c.applyStateDefaults()
+	c.applyBaselineDefaults()
+	c.applyRetentionDefaults()
+	c.applyICMPDefaults()
+	c.applyThresholdDefaults()
+}
+
+func (c *Config) applyTopLevelDefaults() {
+	setDefault(&c.DeviceID, "netquality-default")
+	setDefault(&c.Listen, "127.0.0.1:8080")
+	setDefault(&c.DataDir, "/var/lib/netquality")
+}
+
+func (c *Config) applyScheduleDefaults() {
+	setDefaultDuration(&c.Schedule.Interval, Duration(30*time.Second))
+	setDefaultPositive(&c.Schedule.DNSEvery, 1)
+	setDefaultPositive(&c.Schedule.HTTPEvery, 1)
+}
+
+func (c *Config) applyDNSDefaults() {
+	setDefault(&c.DNS.QueryHost, "google.com")
+	setDefaultDuration(&c.DNS.Timeout, Duration(5*time.Second))
+}
+
+func (c *Config) applyStateDefaults() {
+	setDefaultDuration(&c.State.Debounce, Duration(2*time.Minute))
+	setDefaultDuration(&c.State.ClearDegradedAfter, Duration(5*time.Minute))
+}
+
+func (c *Config) applyBaselineDefaults() {
+	setDefaultPositive(&c.Baseline.WarmupDays, 14)
+	setDefaultDuration(&c.Baseline.RecomputeInterval, Duration(time.Hour))
+	setDefaultPositive(&c.Baseline.AnomalyMultiplier, 1.5)
+}
+
+func (c *Config) applyRetentionDefaults() {
+	setDefaultPositive(&c.Retention.RawDays, 7)
+	setDefaultPositive(&c.Retention.RollupDays, 90)
+}
+
+func (c *Config) applyICMPDefaults() {
+	setDefaultPositive(&c.ICMP.Count, 10)
+	setDefaultDuration(&c.ICMP.Timeout, Duration(10*time.Second))
+}
+
+func (c *Config) applyThresholdDefaults() {
+	setDefaultPositive(&c.Threshold.Gateway.LossPctDegraded, 2)
+	setDefaultPositive(&c.Threshold.Gateway.LossPctDown, 10)
+	setDefaultPositive(&c.Threshold.Gateway.LatencyMsDegraded, 50)
+	setDefaultPositive(&c.Threshold.Gateway.LatencyMsDown, 200)
+	setDefaultPositive(&c.Threshold.DNS.LatencyMsDegraded, 100)
+	setDefaultPositive(&c.Threshold.DNS.LatencyMsDown, 500)
+	setDefaultPositive(&c.Threshold.Path.LatencyMsDegraded, 150)
+	setDefaultPositive(&c.Threshold.Path.LatencyMsDown, 400)
+	setDefaultPositive(&c.Threshold.Path.FailCountDown, 3)
 }
 
 func (c *Config) validate() error {
 	if c.Listen == "" {
 		return fmt.Errorf("listen is required")
 	}
-	if c.Gateway.Enabled && c.Gateway.Host == "" {
-		// auto-detect at runtime
-	}
+	// Gateway.Host may be empty when Enabled=true; auto-detection happens in probe.NewRunner.
 	for i, t := range c.Targets {
 		if t.Name == "" {
 			return fmt.Errorf("targets[%d]: name is required", i)
