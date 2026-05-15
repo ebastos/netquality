@@ -10,15 +10,18 @@ import (
 	"github.com/ebastos/netquality/internal/store"
 )
 
+// Recomputer periodically recomputes hourly baselines from historical latency/loss samples.
 type Recomputer struct {
 	cfg *config.Config
 	db  *store.DB
 }
 
+// NewRecomputer creates a background baseline recomputation worker.
 func NewRecomputer(cfg *config.Config, db *store.DB) *Recomputer {
 	return &Recomputer{cfg: cfg, db: db}
 }
 
+// Run executes one full baseline recomputation pass over the warmup window.
 func (r *Recomputer) Run(ctx context.Context) error {
 	window := int64(r.cfg.Baseline.WarmupDays) * 86400
 	since := store.NowUnix() - window
@@ -68,6 +71,7 @@ func (r *Recomputer) Run(ctx context.Context) error {
 	return nil
 }
 
+// StartBackground launches the recomputer in a goroutine and schedules periodic runs.
 func StartBackground(ctx context.Context, cfg *config.Config, db *store.DB) {
 	rec := NewRecomputer(cfg, db)
 	interval := cfg.Baseline.RecomputeInterval.Std()
