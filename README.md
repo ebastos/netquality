@@ -2,6 +2,7 @@
 
 Single-binary home internet quality monitor for Linux (Raspberry Pi). Measures gateway ICMP, DNS, and HTTP/TCP path latency; tracks per-layer health states; records incidents with JSON export for ISP disputes.
 
+![Netquality dashboard](docs/images/dashboard.png)
 
 ## Features
 

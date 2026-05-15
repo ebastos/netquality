@@ -1,8 +1,8 @@
 # Design: Drill-Down Capabilities for Netquality
 
-**Status:** Approved  
-**Date:** 2026-05-15  
-**Author:** Grok (brainstorming session 019e2dcd)  
+**Status:** Approved
+**Date:** 2026-05-15
+**Author:** Grok (brainstorming session 019e2dcd)
 **Goal:** Enable users to understand *why* a layer entered a degraded or down state and to explore historical probe data, while preserving the clean, glanceable, single-scroll Overview that defines the current dashboard.
 
 ---
@@ -69,7 +69,7 @@ Replace the current raw-JSON dump with a clear, scannable structure:
 4. **Affected Layers** — Improved visual pills
 5. **Technical Detail** — `<details>` disclosure containing the original pretty-printed JSON (power users still have full access)
 
-Add a primary action button: **"View in Analysis"**  
+Add a primary action button: **"View in Analysis"**
 Clicking it activates the Analysis sidebar item, sets the time range to the incident window, and pre-selects the most relevant probe(s).
 
 ### 3. Layer Cards — Subtle Entry Point
