@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ebastos/netquality/internal/config"
@@ -82,6 +83,19 @@ func AggregateMetrics(samples []store.Sample) ProbeMetrics {
 	return m
 }
 
+// classifyProbe returns the evaluation category for a probe name.
+// "gateway" and "dns"/"dns:*" are special; everything else is treated as a path probe.
+func classifyProbe(probe string) string {
+	switch {
+	case probe == "gateway":
+		return "gateway"
+	case probe == "dns" || strings.HasPrefix(probe, "dns:"):
+		return "dns"
+	default:
+		return "path"
+	}
+}
+
 func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store.Sample) error {
 	now := store.NowUnix()
 	warm, _ := e.IsWarm(ctx)
@@ -90,55 +104,16 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 	dimStates := make(map[string]string)
 	dimDetail := make(map[string]map[string]any)
 
-	evalGateway := func(probe string, m ProbeMetrics) string {
-		th := e.cfg.Threshold.Gateway
-		latThresh := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
-		if m.LossPct >= th.LossPctDown || m.OK < 1 {
-			return StateDown
-		}
-		if m.LossPct >= th.LossPctDegraded || m.LatencyMs >= latThresh.degraded {
-			return StateDegraded
-		}
-		return StateOK
-	}
-
-	evalDNS := func(probe string, m ProbeMetrics) string {
-		th := e.cfg.Threshold.DNS
-		lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
-		if m.OK < 1 || m.LatencyMs >= lat.down {
-			return StateDown
-		}
-		if m.LatencyMs >= lat.degraded {
-			return StateDegraded
-		}
-		return StateOK
-	}
-
-	evalPath := func(probe string, m ProbeMetrics) string {
-		th := e.cfg.Threshold.Path
-		lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
-		if m.FailCount >= th.FailCountDown || m.OK < 1 {
-			return StateDown
-		}
-		if m.LatencyMs >= lat.down {
-			return StateDown
-		}
-		if m.LatencyMs >= lat.degraded {
-			return StateDegraded
-		}
-		return StateOK
-	}
-
 	for probe, samples := range samplesByProbe {
 		m := AggregateMetrics(samples)
 		var st string
-		switch {
-		case probe == "gateway":
-			st = evalGateway(probe, m)
-		case probe == "dns" || len(probe) > 4 && probe[:4] == "dns:":
-			st = evalDNS(probe, m)
+		switch classifyProbe(probe) {
+		case "gateway":
+			st = e.evaluateGateway(ctx, probe, m, warm, hour)
+		case "dns":
+			st = e.evaluateDNS(ctx, probe, m, warm, hour)
 		default:
-			st = evalPath(probe, m)
+			st = e.evaluatePath(ctx, probe, m, warm, hour)
 		}
 		dimStates[probe] = st
 		dimDetail[probe] = map[string]any{
@@ -148,7 +123,7 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 		}
 	}
 
-	// overall
+	// Compute overall worst state across all dimensions.
 	var all []string
 	for _, st := range dimStates {
 		all = append(all, st)
@@ -157,7 +132,7 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 	dimStates["overall"] = overall
 	dimDetail["overall"] = map[string]any{"children": dimStates, "warm": warm}
 
-	// apply state machine + persist
+	// Apply debounce/hysteresis via StateMachine, then persist each dimension's final state.
 	for dim, proposed := range dimStates {
 		current, err := e.sm.Apply(ctx, e.db, dim, proposed, now)
 		if err != nil {
@@ -174,6 +149,45 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 	}
 
 	return e.handleIncidents(ctx, overall, dimStates, dimDetail, now)
+}
+
+func (e *Engine) evaluateGateway(ctx context.Context, probe string, m ProbeMetrics, warm bool, hour int) string {
+	th := e.cfg.Threshold.Gateway
+	lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
+	if m.LossPct >= th.LossPctDown || m.OK < 1 {
+		return StateDown
+	}
+	if m.LossPct >= th.LossPctDegraded || m.LatencyMs >= lat.degraded {
+		return StateDegraded
+	}
+	return StateOK
+}
+
+func (e *Engine) evaluateDNS(ctx context.Context, probe string, m ProbeMetrics, warm bool, hour int) string {
+	th := e.cfg.Threshold.DNS
+	lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
+	if m.OK < 1 || m.LatencyMs >= lat.down {
+		return StateDown
+	}
+	if m.LatencyMs >= lat.degraded {
+		return StateDegraded
+	}
+	return StateOK
+}
+
+func (e *Engine) evaluatePath(ctx context.Context, probe string, m ProbeMetrics, warm bool, hour int) string {
+	th := e.cfg.Threshold.Path
+	lat := effectiveThreshold(ctx, e.db, warm, e.cfg, probe, "latency_ms", hour, th.LatencyMsDegraded, th.LatencyMsDown, true)
+	if m.FailCount >= th.FailCountDown || m.OK < 1 {
+		return StateDown
+	}
+	if m.LatencyMs >= lat.down {
+		return StateDown
+	}
+	if m.LatencyMs >= lat.degraded {
+		return StateDegraded
+	}
+	return StateOK
 }
 
 type threshPair struct {
