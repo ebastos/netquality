@@ -2,9 +2,9 @@ package eval
 
 // State values for dimensions and overall health.
 const (
-	StateOK        = "ok"
-	StateDegraded  = "degraded"
-	StateDown      = "down"
+	StateOK       = "ok"
+	StateDegraded = "degraded"
+	StateDown     = "down"
 )
 
 var stateRank = map[string]int{

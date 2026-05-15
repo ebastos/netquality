@@ -1,0 +1,37 @@
+# .golangci.yml
+# golangci-lint configuration for netquality
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  # Use a curated set of linters (defaults plus a few common ones).
+  # The pre-commit hook and CI can enable more over time.
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Example additions you may want later:
+    # - revive
+    # - gofmt      # (note: we already have a dedicated go-fmt hook)
+    # - misspell
+    # - unparam
+
+linters-settings:
+  staticcheck:
+    # SA1019 = "package is deprecated". We have one use of the unmaintained
+    # go-ping/ping for raw ICMP. Exclude only for that file so the check
+    # remains active for any new code.
+    checks: ["all"]
+
+issues:
+  exclude-rules:
+    - path: 'internal/probe/icmp\.go'
+      linters:
+        - staticcheck
+      text: "SA1019: .* is deprecated"

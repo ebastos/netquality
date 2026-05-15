@@ -13,14 +13,14 @@ type Config struct {
 	Listen   string `yaml:"listen"`
 	DataDir  string `yaml:"data_dir"`
 
-	Schedule  ScheduleConfig  `yaml:"schedule"`
-	Gateway   GatewayConfig   `yaml:"gateway"`
-	DNS       DNSConfig       `yaml:"dns"`
-	Targets   []TargetConfig  `yaml:"targets"`
+	Schedule  ScheduleConfig   `yaml:"schedule"`
+	Gateway   GatewayConfig    `yaml:"gateway"`
+	DNS       DNSConfig        `yaml:"dns"`
+	Targets   []TargetConfig   `yaml:"targets"`
 	Threshold ThresholdsConfig `yaml:"thresholds"`
-	State     StateConfig     `yaml:"state"`
-	Baseline  BaselineConfig  `yaml:"baseline"`
-	Retention RetentionConfig `yaml:"retention"`
+	State     StateConfig      `yaml:"state"`
+	Baseline  BaselineConfig   `yaml:"baseline"`
+	Retention RetentionConfig  `yaml:"retention"`
 
 	ICMP ICMPConfig `yaml:"icmp"`
 }
@@ -32,7 +32,7 @@ type ScheduleConfig struct {
 }
 
 type GatewayConfig struct {
-	Enabled bool   `yaml:"enabled"`
+	Enabled bool `yaml:"enabled"`
 	// Host is optional. When empty and Enabled is true, the gateway is auto-detected
 	// from the default route at runtime (see probe.NewRunner).
 	Host string `yaml:"host"`

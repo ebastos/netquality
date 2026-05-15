@@ -1,0 +1,22 @@
+# yamllint configuration for netquality
+# https://yamllint.readthedocs.io/en/stable/configuration.html
+
+extends: default
+
+rules:
+  # GitHub Actions workflow files use bare "on:" which is a YAML 1.1 boolean.
+  # Disable key checking to avoid noisy warnings on legitimate workflow syntax.
+  truthy:
+    check-keys: false
+
+  # Allow reasonably long lines (comments in example configs can be descriptive).
+  line-length:
+    max: 100
+    level: warning
+
+  # Do not require leading "---" document start marker.
+  document-start: disable
+
+  # Be lenient on comment formatting for readability.
+  comments:
+    min-spaces-from-content: 1

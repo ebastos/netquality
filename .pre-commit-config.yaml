@@ -1,0 +1,43 @@
+# .pre-commit-config.yaml
+# Pre-commit configuration for netquality
+# https://pre-commit.com
+#
+# Required tools (installed separately):
+#   - go (for gofmt, go vet)
+#   - golangci-lint (for golangci-lint hook)
+#   - pre-commit (the framework)
+#
+# yamllint is auto-installed by pre-commit in an isolated Python environment.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      - id: golangci-lint
+
+  # go vet via local hook (reliable for cmd/ + internal/ module layouts where
+  # `go list` at root produces no package). golangci-lint also runs govet internally.
+  - repo: local
+    hooks:
+      - id: go-vet
+        name: go vet
+        entry: go vet ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+        description: Runs `go vet ./...` for static analysis (printf, struct tags, etc.).
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
