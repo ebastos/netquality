@@ -34,23 +34,7 @@ func ICMPProbe(ctx context.Context, host string, count int, timeout time.Duratio
 		res.OK = stats.PacketsRecv > 0 || stats.PacketLoss < 100
 		res.LossPct = stats.PacketLoss
 		res.LatencyMs = float64(stats.AvgRtt.Milliseconds())
-		if len(stats.Rtts) > 1 {
-			var sum, sumSq float64
-			for _, rtt := range stats.Rtts {
-				ms := float64(rtt.Milliseconds())
-				sum += ms
-				sumSq += ms * ms
-			}
-			n := float64(len(stats.Rtts))
-			mean := sum / n
-			variance := sumSq/n - mean*mean
-			if variance < 0 {
-				variance = 0
-			}
-			res.JitterMs = math.Sqrt(variance)
-		} else if stats.StdDevRtt > 0 {
-			res.JitterMs = float64(stats.StdDevRtt.Milliseconds())
-		}
+		res.JitterMs = computeJitter(stats.Rtts, stats.StdDevRtt)
 		close(done)
 	}
 
@@ -69,4 +53,29 @@ func ICMPProbe(ctx context.Context, host string, count int, timeout time.Duratio
 		res.LossPct = 100
 	}
 	return res, nil
+}
+
+// computeJitter returns the jitter (population standard deviation) of RTT samples in milliseconds.
+// When multiple RTTs are available it computes the value from the samples directly;
+// otherwise it falls back to the library-provided StdDevRtt.
+func computeJitter(rtts []time.Duration, stdDev time.Duration) float64 {
+	if len(rtts) > 1 {
+		var sum, sumSq float64
+		for _, rtt := range rtts {
+			ms := float64(rtt.Milliseconds())
+			sum += ms
+			sumSq += ms * ms
+		}
+		n := float64(len(rtts))
+		mean := sum / n
+		variance := sumSq/n - mean*mean
+		if variance < 0 {
+			variance = 0
+		}
+		return math.Sqrt(variance)
+	}
+	if stdDev > 0 {
+		return float64(stdDev.Milliseconds())
+	}
+	return 0
 }
