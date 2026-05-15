@@ -13,16 +13,19 @@ import (
 //go:embed web/*
 var webFS embed.FS
 
+// Server wires the JSON API handlers and static web UI to the underlying store and engine.
 type Server struct {
 	cfg    *config.Config
 	db     *store.DB
 	engine *eval.Engine
 }
 
+// New constructs the HTTP server mux (API routes + static files under /).
 func New(cfg *config.Config, db *store.DB, engine *eval.Engine) *Server {
 	return &Server{cfg: cfg, db: db, engine: engine}
 }
 
+// Handler returns the http.Handler (ready to be served by http.Server).
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	h := &handlers{srv: s}
