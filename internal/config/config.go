@@ -119,6 +119,13 @@ func (d Duration) Std() time.Duration {
 }
 
 func Load(path string) (*Config, error) {
+	// #nosec G304 - CWE-22 false positive. The path argument originates exclusively
+	// from the -config CLI flag or NETQUALITY_CONFIG environment variable. Both are
+	// controlled by the system administrator at daemon startup (typically via
+	// systemd unit or manual invocation). There is no code path that accepts a
+	// file path from network input, API clients, or any untrusted source.
+	// Using os.Root would incorrectly constrain legitimate admin-specified
+	// locations (e.g. /etc/netquality/config.yaml or a custom data_dir).
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
