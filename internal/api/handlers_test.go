@@ -35,14 +35,14 @@ func TestStatusIncludesLearningWhenNotWarm(t *testing.T) {
 		t.Fatalf("status %d: %s", w.Code, w.Body.String())
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
 	if body["warm"] != false {
 		t.Fatalf("expected warm false, got %v", body["warm"])
 	}
-	learning, ok := body["learning"].(map[string]interface{})
+	learning, ok := body["learning"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected learning object, got %v", body["learning"])
 	}
@@ -80,7 +80,7 @@ func TestStatusStatesUseSnakeCase(t *testing.T) {
 	srv.Handler().ServeHTTP(w, req)
 
 	var body struct {
-		States []map[string]interface{} `json:"states"`
+		States []map[string]any `json:"states"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)

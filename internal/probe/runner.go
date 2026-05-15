@@ -52,86 +52,97 @@ func (r *Runner) RunCycle(ctx context.Context) ([]store.Sample, error) {
 		mu.Unlock()
 	}
 
-	if r.cfg.Gateway.Enabled && r.gatewayHost != "" {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			res, err := ICMPProbe(ctx, r.gatewayHost, r.cfg.ICMP.Count, r.cfg.ICMP.Timeout.Std())
-			if err != nil {
-				add(
-					sample(ts, "gateway", "loss_pct", 100, nil),
-					sample(ts, "gateway", "latency_ms", 0, nil),
-					sample(ts, "gateway", "jitter_ms", 0, nil),
-					sample(ts, "gateway", "ok", 0, nil),
-				)
-				return
-			}
-			ok := 1.0
-			if !res.OK {
-				ok = 0
-			}
-			add(
-				sample(ts, "gateway", "loss_pct", res.LossPct, nil),
-				sample(ts, "gateway", "latency_ms", res.LatencyMs, nil),
-				sample(ts, "gateway", "jitter_ms", res.JitterMs, nil),
-				sample(ts, "gateway", "ok", ok, nil),
-			)
-		}()
-	}
+	r.runGatewayProbe(ctx, ts, add, &wg)
+	r.runDNSProbe(ctx, cycle, ts, add, &wg)
+	r.runPathProbes(ctx, cycle, ts, add, &wg)
 
-	if (cycle-1)%r.cfg.Schedule.DNSEvery == 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			res, err := DNSProbe(ctx, r.cfg.DNS.QueryHost, r.cfg.DNS.Timeout.Std())
+	wg.Wait()
+	return samples, nil
+}
+
+func (r *Runner) runGatewayProbe(ctx context.Context, ts int64, add func(...store.Sample), wg *sync.WaitGroup) {
+	if !r.cfg.Gateway.Enabled || r.gatewayHost == "" {
+		return
+	}
+	wg.Go(func() {
+		res, err := ICMPProbe(ctx, r.gatewayHost, r.cfg.ICMP.Count, r.cfg.ICMP.Timeout.Std())
+		if err != nil {
+			add(
+				sample(ts, "gateway", "loss_pct", 100, nil),
+				sample(ts, "gateway", "latency_ms", 0, nil),
+				sample(ts, "gateway", "jitter_ms", 0, nil),
+				sample(ts, "gateway", "ok", 0, nil),
+			)
+			return
+		}
+		ok := 1.0
+		if !res.OK {
+			ok = 0
+		}
+		add(
+			sample(ts, "gateway", "loss_pct", res.LossPct, nil),
+			sample(ts, "gateway", "latency_ms", res.LatencyMs, nil),
+			sample(ts, "gateway", "jitter_ms", res.JitterMs, nil),
+			sample(ts, "gateway", "ok", ok, nil),
+		)
+	})
+}
+
+func (r *Runner) runDNSProbe(ctx context.Context, cycle int, ts int64, add func(...store.Sample), wg *sync.WaitGroup) {
+	if (cycle-1)%r.cfg.Schedule.DNSEvery != 0 {
+		return
+	}
+	wg.Go(func() {
+		res, err := DNSProbe(ctx, r.cfg.DNS.QueryHost, r.cfg.DNS.Timeout.Std())
+		ok := 1.0
+		if err != nil || !res.OK {
+			ok = 0
+		}
+		add(
+			sample(ts, "dns", "latency_ms", res.LatencyMs, map[string]string{"resolver": res.Resolver}),
+			sample(ts, "dns", "ok", ok, nil),
+		)
+		if r.cfg.DNS.ResolverIP != "" {
+			r.runDNSResolverProbe(ctx, ts, add, r.cfg.DNS.ResolverIP)
+		}
+	})
+}
+
+func (r *Runner) runDNSResolverProbe(ctx context.Context, ts int64, add func(...store.Sample), resolverIP string) {
+	res, err := DNSProbeResolver(ctx, r.cfg.DNS.QueryHost, resolverIP, r.cfg.DNS.Timeout.Std())
+	ok2 := 1.0
+	if err != nil || !res.OK {
+		ok2 = 0
+	}
+	add(
+		sample(ts, "dns:"+resolverIP, "latency_ms", res.LatencyMs, map[string]string{"resolver": res.Resolver}),
+		sample(ts, "dns:"+resolverIP, "ok", ok2, nil),
+	)
+}
+
+func (r *Runner) runPathProbes(ctx context.Context, cycle int, ts int64, add func(...store.Sample), wg *sync.WaitGroup) {
+	if (cycle-1)%r.cfg.Schedule.HTTPEvery != 0 {
+		return
+	}
+	for _, t := range r.cfg.Targets {
+		target := t
+		wg.Go(func() {
+			probeName := "path:" + target.Name
+			res, err := ProbeTarget(ctx, target.Name, target.URL, target.Host, target.Port, target.Method, target.Mode, r.cfg.DNS.Timeout.Std())
 			ok := 1.0
 			if err != nil || !res.OK {
 				ok = 0
 			}
-			add(
-				sample(ts, "dns", "latency_ms", res.LatencyMs, map[string]string{"resolver": res.Resolver}),
-				sample(ts, "dns", "ok", ok, nil),
-			)
-			if r.cfg.DNS.ResolverIP != "" {
-				res2, err2 := DNSProbeResolver(ctx, r.cfg.DNS.QueryHost, r.cfg.DNS.ResolverIP, r.cfg.DNS.Timeout.Std())
-				ok2 := 1.0
-				if err2 != nil || !res2.OK {
-					ok2 = 0
-				}
-				add(
-					sample(ts, "dns:"+r.cfg.DNS.ResolverIP, "latency_ms", res2.LatencyMs, map[string]string{"resolver": res2.Resolver}),
-					sample(ts, "dns:"+r.cfg.DNS.ResolverIP, "ok", ok2, nil),
-				)
+			latency := res.LatencyMs
+			if err != nil && latency == 0 {
+				latency = float64(r.cfg.DNS.Timeout.Std().Milliseconds())
 			}
-		}()
+			add(
+				sample(ts, probeName, "latency_ms", latency, nil),
+				sample(ts, probeName, "ok", ok, nil),
+			)
+		})
 	}
-
-	if (cycle-1)%r.cfg.Schedule.HTTPEvery == 0 {
-		for _, t := range r.cfg.Targets {
-			target := t
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				probeName := "path:" + target.Name
-				res, err := ProbeTarget(ctx, target.Name, target.URL, target.Host, target.Port, target.Method, target.Mode, r.cfg.DNS.Timeout.Std())
-				ok := 1.0
-				if err != nil || !res.OK {
-					ok = 0
-				}
-				latency := res.LatencyMs
-				if err != nil && latency == 0 {
-					latency = float64(r.cfg.DNS.Timeout.Std().Milliseconds())
-				}
-				add(
-					sample(ts, probeName, "latency_ms", latency, nil),
-					sample(ts, probeName, "ok", ok, nil),
-				)
-			}()
-		}
-	}
-
-	wg.Wait()
-	return samples, nil
 }
 
 func sample(ts int64, probe, metric string, value float64, labels map[string]string) store.Sample {

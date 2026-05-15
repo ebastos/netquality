@@ -65,10 +65,7 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 		}
 	}
 
-	window := int64(s.cfg.State.Debounce.Std().Seconds()) + 60
-	if window < 120 {
-		window = 120
-	}
+	window := max(int64(s.cfg.State.Debounce.Std().Seconds())+60, 120)
 	since := store.NowUnix() - window
 	byProbe, err := s.db.RecentSamplesByProbe(ctx, since)
 	if err != nil {

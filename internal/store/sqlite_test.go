@@ -20,7 +20,7 @@ func TestOpenInsertStates(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SetState(ctx, "overall", StateOK, NowUnix(), map[string]interface{}{}); err != nil {
+	if err := db.SetState(ctx, "overall", StateOK, NowUnix(), map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
 	states, err := db.GetStates(ctx)

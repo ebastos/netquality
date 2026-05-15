@@ -7,7 +7,7 @@ import (
 
 func assertJSONKeys(t *testing.T, payload []byte, keys ...string) {
 	t.Helper()
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(payload, &m); err != nil {
 		t.Fatal(err)
 	}

@@ -17,11 +17,11 @@ import (
 var schemaSQL string
 
 type Sample struct {
-	Ts     int64              `json:"ts"`
-	Probe  string             `json:"probe"`
-	Metric string             `json:"metric"`
-	Value  float64            `json:"value"`
-	Labels map[string]string  `json:"labels,omitempty"`
+	Ts     int64             `json:"ts"`
+	Probe  string            `json:"probe"`
+	Metric string            `json:"metric"`
+	Value  float64           `json:"value"`
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 type Rollup5m struct {
@@ -36,19 +36,19 @@ type Rollup5m struct {
 }
 
 type Baseline struct {
-	Probe       string
-	Metric      string
-	HourOfWeek  int
-	P50         float64
-	P95         float64
-	UpdatedAt   int64
+	Probe      string
+	Metric     string
+	HourOfWeek int
+	P50        float64
+	P95        float64
+	UpdatedAt  int64
 }
 
 type DimensionState struct {
-	Dimension string                 `json:"dimension"`
-	State     string                 `json:"state"`
-	SinceTs   int64                  `json:"since_ts"`
-	Detail    map[string]interface{} `json:"detail,omitempty"`
+	Dimension string         `json:"dimension"`
+	State     string         `json:"state"`
+	SinceTs   int64          `json:"since_ts"`
+	Detail    map[string]any `json:"detail,omitempty"`
 }
 
 type Incident struct {
@@ -136,7 +136,7 @@ func (s *DB) SamplesSince(ctx context.Context, probe string, since int64) ([]Sam
 
 func (s *DB) SamplesRange(ctx context.Context, probe string, from, to int64) ([]Sample, error) {
 	q := `SELECT ts, probe, metric, value, labels FROM samples WHERE ts >= ? AND ts <= ?`
-	args := []interface{}{from, to}
+	args := []any{from, to}
 	if probe != "" {
 		q += ` AND probe = ?`
 		args = append(args, probe)
@@ -271,7 +271,7 @@ func (s *DB) BaselineSamples(ctx context.Context, since int64) ([]Sample, error)
 	return out, rows.Err()
 }
 
-func (s *DB) SetState(ctx context.Context, dim, state string, since int64, detail map[string]interface{}) error {
+func (s *DB) SetState(ctx context.Context, dim, state string, since int64, detail map[string]any) error {
 	detailJSON, _ := json.Marshal(detail)
 	if detailJSON == nil {
 		detailJSON = []byte("{}")
@@ -451,10 +451,7 @@ func Percentile(sorted []float64, p float64) float64 {
 	if len(sorted) == 0 {
 		return 0
 	}
-	idx := int(math.Ceil(p*float64(len(sorted)))) - 1
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(int(math.Ceil(p*float64(len(sorted))))-1, 0)
 	if idx >= len(sorted) {
 		idx = len(sorted) - 1
 	}
@@ -477,13 +474,13 @@ func FormatTS(ts int64) string {
 
 // ExportBundle is the ISP evidence export structure.
 type ExportBundle struct {
-	DeviceID   string                 `json:"device_id"`
-	Incident   Incident               `json:"incident"`
-	States     []DimensionState       `json:"states"`
-	Samples    []Sample               `json:"samples"`
-	Rollups    []Rollup5m             `json:"rollups"`
-	ExportedAt string                 `json:"exported_at"`
-	Extra      map[string]interface{} `json:"extra,omitempty"`
+	DeviceID   string           `json:"device_id"`
+	Incident   Incident         `json:"incident"`
+	States     []DimensionState `json:"states"`
+	Samples    []Sample         `json:"samples"`
+	Rollups    []Rollup5m       `json:"rollups"`
+	ExportedAt string           `json:"exported_at"`
+	Extra      map[string]any   `json:"extra,omitempty"`
 }
 
 func (s *DB) BuildExport(ctx context.Context, deviceID string, inc *Incident) (*ExportBundle, error) {

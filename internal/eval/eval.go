@@ -88,7 +88,7 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 	hour := store.HourOfWeek(time.Now())
 
 	dimStates := make(map[string]string)
-	dimDetail := make(map[string]map[string]interface{})
+	dimDetail := make(map[string]map[string]any)
 
 	evalGateway := func(probe string, m ProbeMetrics) string {
 		th := e.cfg.Threshold.Gateway
@@ -141,7 +141,7 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 			st = evalPath(probe, m)
 		}
 		dimStates[probe] = st
-		dimDetail[probe] = map[string]interface{}{
+		dimDetail[probe] = map[string]any{
 			"metrics":   m,
 			"warm":      warm,
 			"threshold": true,
@@ -155,7 +155,7 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 	}
 	overall := WorstState(all...)
 	dimStates["overall"] = overall
-	dimDetail["overall"] = map[string]interface{}{"children": dimStates, "warm": warm}
+	dimDetail["overall"] = map[string]any{"children": dimStates, "warm": warm}
 
 	// apply state machine + persist
 	for dim, proposed := range dimStates {
@@ -165,7 +165,7 @@ func (e *Engine) Evaluate(ctx context.Context, samplesByProbe map[string][]store
 		}
 		detail := dimDetail[dim]
 		if detail == nil {
-			detail = map[string]interface{}{}
+			detail = map[string]any{}
 		}
 		detail["proposed"] = proposed
 		if err := e.db.SetState(ctx, dim, current, now, detail); err != nil {
@@ -200,7 +200,7 @@ func effectiveThreshold(ctx context.Context, db *store.DB, warm bool, cfg *confi
 	return pair
 }
 
-func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates map[string]string, detail map[string]map[string]interface{}, now int64) error {
+func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates map[string]string, detail map[string]map[string]any, now int64) error {
 	active, err := e.db.ActiveIncident(ctx)
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates 
 
 	bad := overall == StateDegraded || overall == StateDown
 	if bad && active == nil {
-		detailJSON, _ := json.Marshal(map[string]interface{}{
+		detailJSON, _ := json.Marshal(map[string]any{
 			"dimensions": dimStates,
 			"detail":     detail,
 			"opened_at":  store.FormatTS(now),
@@ -217,7 +217,7 @@ func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates 
 		return err
 	}
 	if !bad && active != nil {
-		detailJSON, _ := json.Marshal(map[string]interface{}{
+		detailJSON, _ := json.Marshal(map[string]any{
 			"dimensions": dimStates,
 			"detail":     detail,
 			"closed_at":  store.FormatTS(now),
@@ -226,7 +226,7 @@ func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates 
 		return e.db.CloseIncident(ctx, active.ID, now, string(detailJSON))
 	}
 	if bad && active != nil && Rank(overall) > Rank(active.OverallState) {
-		closeDetail, _ := json.Marshal(map[string]interface{}{
+		closeDetail, _ := json.Marshal(map[string]any{
 			"dimensions": dimStates,
 			"detail":     detail,
 			"escalated":  store.FormatTS(now),
@@ -235,10 +235,10 @@ func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates 
 		if err := e.db.CloseIncident(ctx, active.ID, now, string(closeDetail)); err != nil {
 			return err
 		}
-		openDetail, _ := json.Marshal(map[string]interface{}{
-			"dimensions": dimStates,
-			"detail":     detail,
-			"opened_at":  store.FormatTS(now),
+		openDetail, _ := json.Marshal(map[string]any{
+			"dimensions":     dimStates,
+			"detail":         detail,
+			"opened_at":      store.FormatTS(now),
 			"escalated_from": active.ID,
 		})
 		_, err = e.db.OpenIncident(ctx, now, overall, string(openDetail))
@@ -249,14 +249,14 @@ func (e *Engine) handleIncidents(ctx context.Context, overall string, dimStates 
 
 // StateMachine applies hysteresis/debounce to proposed states.
 type StateMachine struct {
-	cfg           *config.Config
-	pending       map[string]pendingTransition
-	current       map[string]string
+	cfg     *config.Config
+	pending map[string]pendingTransition
+	current map[string]string
 }
 
 type pendingTransition struct {
-	proposed  string
-	since     int64
+	proposed string
+	since    int64
 }
 
 func NewStateMachine(cfg *config.Config) *StateMachine {
