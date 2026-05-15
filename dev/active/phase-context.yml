@@ -1,0 +1,137 @@
+# Phase Context
+# Output from brainstorming / discuss-phase before detailed ACE planning
+# Used by writing-plans-ace to generate implementation plans
+
+feature:
+  name: "drill-down-capabilities"
+  description: "Add drill-down for layer health and incidents (Analysis hub + greatly improved incident modal) while keeping the main Overview clean and glanceable."
+  type: "feature"
+
+preferences:
+  ui:
+    layout: "sidebar navigation with mutually exclusive Overview vs Analysis content areas"
+    style: "minimal, dark, Pi-friendly, consistent with existing card/pill/state-badge design system"
+    error_messages: "actionable and technical (matching current API error style)"
+
+  behavior:
+    defaults:
+      - "Overview remains the default landing view with zero visual changes"
+      - "Analysis view is opt-in via sidebar and does not affect periodic refresh of Overview"
+      - "Incident explanation is the primary user journey"
+
+  constraints:
+    must_have:
+      - "No new permanent charts, widgets or visual weight on the default Overview"
+      - "Incident modal must show human-readable trigger metrics + active thresholds (config vs baseline) before raw JSON"
+      - "Layer cards must provide a subtle drill-down affordance to Analysis"
+      - "All new UI must reuse existing color tokens, spacing, and component patterns exactly"
+      - "Existing /api/v1/samples and /api/v1/rollups endpoints must be reused for the Analysis surface"
+    nice_to_have:
+      - "Pre-filter Analysis view when coming from an incident's 'View in Analysis' button"
+    must_not:
+      - "No side-by-side probe comparison in v1"
+      - "No live-updating charts inside Analysis (polling is acceptable)"
+      - "No changes to scheduling, retention, baseline math, or YAML configuration"
+
+technical:
+  existing_patterns:
+    - name: "Layer card + tiny sparkline rendering"
+      location: "internal/api/web/app.js:175"
+      notes: "RenderLayerCards already pulls recent rollups per probe; we can reuse the same data source for Analysis"
+    - name: "drawLatencyChart with time-window downsampling"
+      location: "internal/api/web/app.js:232"
+      notes: "Strongly reuse and extend rather than duplicate for the Analysis probe chart"
+    - name: "showIncidentModal + detail_json parsing"
+      location: "internal/api/web/app.js:463"
+      notes: "Refactor into smaller render functions for timeline + trigger metrics sections"
+    - name: "State constants and Rank/WorstState helpers"
+      location: "internal/eval/state.go"
+      notes: "Continue using StateOK / StateDegraded / StateDown everywhere"
+    - name: "effectiveThreshold + baseline integration"
+      location: "internal/eval/eval.go:199"
+      notes: "Extend return value to also expose the concrete degraded/down numbers and source (config vs baseline)"
+
+  integration_points:
+    - component: "Evaluation detail enrichment"
+      file: "internal/eval/eval.go"
+      change_type: "extend"
+    - component: "New probes listing endpoint"
+      file: "internal/api/handlers.go + server.go"
+      change_type: "add"
+    - component: "Incident modal rendering"
+      file: "internal/api/web/app.js + index.html"
+      change_type: "modify"
+    - component: "Analysis surface + nav switching"
+      file: "internal/api/web/app.js + index.html + style.css"
+      change_type: "add"
+    - component: "Samples and rollups reuse"
+      file: "internal/store/sqlite.go:137,195"
+      change_type: "reuse"
+
+  risk_areas:
+    - area: "Main Overview visual regression"
+      concern: "Any mistake in the new nav/content switching logic could accidentally show Analysis elements on the default view"
+      mitigation: "Strict mutual-exclusion containers; all new DOM nodes live under #analysis-view which is hidden by default; extensive manual regression checklist"
+    - area: "Threshold source truthfulness"
+      concern: "If we store only metrics without the actual threshold numbers used at evaluation time, explanations will be incomplete"
+      mitigation: "Enrich dimDetail during evaluateGateway/DNS/Path before any UI work"
+    - area: "Performance on Raspberry Pi"
+      concern: "Analysis view fetching many raw samples could feel slow on a Pi 3/4"
+      mitigation: "Limit initial samples table to last 50-100 rows; use existing 5m rollups for the chart; keep Analysis on-demand only"
+
+research:
+  libraries_evaluated: []
+  patterns_considered:
+    - pattern: "Everything in modals/drawers only (no new sidebar surface)"
+      verdict: "reject"
+      reason: "User explicitly chose 'Moderate — add one Analysis view in the sidebar' during brainstorming"
+    - pattern: "Add permanent widgets to Overview"
+      verdict: "reject"
+      reason: "Violates the core constraint of not compromising the clean and simple dashboard"
+  decision_log:
+    - decision: "Single-probe focus in Analysis v1"
+      rationale: "Keeps implementation and UI complexity low; side-by-side comparison is classic YAGNI for first release"
+      alternatives_rejected: ["Multi-probe comparison view", "Brushing on the main chart only"]
+
+scope:
+  in_scope:
+    - "Backend: capture actual thresholds + source in dimDetail during evaluation"
+    - "API: one small new GET /api/v1/probes endpoint (optional but recommended)"
+    - "UI: significantly improved incident modal with timeline + triggering measurements + 'View in Analysis' action"
+    - "UI: subtle hover affordance on layer cards that routes to Analysis pre-filtered"
+    - "UI: new Analysis sidebar surface (probe selector, richer latency chart with p95, stats cards, raw samples table)"
+    - "Full reuse of existing /samples and /rollups endpoints"
+    - "Tests and manual verification that Overview is untouched"
+  out_of_scope:
+    - "Side-by-side probe comparison"
+    - "Live-updating charts or WebSocket streaming"
+    - "Any new permanent elements on the default Overview"
+    - "Changes to probe scheduling, retention policies, or baseline computation logic"
+    - "Image/PDF export from Analysis"
+    - "Mobile-specific Analysis layout beyond existing responsive breakpoints"
+  deferred:
+    - "Multi-probe comparison in a later iteration"
+    - "Bookmarkable deep links into Analysis (hash routing)"
+    - "Exporting the Analysis view as a shareable artifact"
+
+success:
+  must_be_true:
+    - "The default Overview page is visually and functionally identical before and after the change"
+    - "Any incident can display the concrete metrics and the exact threshold (with source) that caused the state transition"
+    - "User can reach detailed per-probe data (chart + raw samples + current thresholds) in at most two clicks from a layer card or an incident"
+    - "All go vet and go test -race checks continue to pass"
+    - "Manual Pi-class verification confirms touch targets remain adequate and performance is acceptable"
+  must_exist:
+    - "docs/plans/2026-05-15-drill-down-capabilities-design.md"
+    - "dev/active/phase-context.yml"
+    - "Updated incident modal with human-readable trigger section"
+    - "Working Analysis surface behind sidebar nav item"
+  must_be_wired:
+    - "Layer card click → Analysis view filtered to that probe"
+    - "Incident 'View in Analysis' button → Analysis view with incident time window pre-selected"
+    - "Analysis probe/time changes → fetch from existing /rollups + /samples endpoints"
+
+metadata:
+  created: "2026-05-15"
+  session_id: "019e2dcd-023c-7180-89a6-5fd5e8faeaf8"
+  discussed_with: "user"
