@@ -122,7 +122,7 @@ For ISP-faithful results, run the Pi with **wired Ethernet** to your primary rou
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Web dashboard |
-| `GET /api/v1/status` | Current dimension states, `baseline_mode`, `warm`, and `learning` progress while warming up |
+| `GET /api/v1/status` | Current dimension states, `baseline_mode`, `warm`, `learning`, and (when enabled) `public_ip` with current WAN IP, last change, CGNAT flag, and recent history |
 | `GET /api/v1/incidents` | Incident list |
 | `GET /api/v1/incidents/{id}/export` | Evidence JSON download |
 | `GET /api/v1/rollups?since=` | 5-minute rollups for charts |

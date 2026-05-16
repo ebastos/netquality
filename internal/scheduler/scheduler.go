@@ -35,6 +35,10 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	baseline.StartBackground(ctx, s.cfg, s.db)
 	go s.rollupLoop(ctx)
 	go s.retentionLoop(ctx)
+	if s.cfg.PublicIP.Enabled {
+		slog.Info("public ip tracking enabled", "endpoint", s.cfg.PublicIP.Endpoint, "interval", s.cfg.PublicIP.Interval.Std())
+		go s.publicIPLoop(ctx)
+	}
 
 	interval := s.cfg.Schedule.Interval.Std()
 	if s.cfg.Gateway.Enabled {
@@ -125,5 +129,34 @@ func (s *Scheduler) retentionLoop(ctx context.Context) {
 				slog.Error("prune rollups", "err", err)
 			}
 		}
+	}
+}
+
+func (s *Scheduler) publicIPLoop(ctx context.Context) {
+	ticker := time.NewTicker(s.cfg.PublicIP.Interval.Std())
+	defer ticker.Stop()
+
+	// initial check
+	s.checkPublicIP(ctx)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.checkPublicIP(ctx)
+		}
+	}
+}
+
+func (s *Scheduler) checkPublicIP(ctx context.Context) {
+	res, err := probe.PublicIP(ctx, s.cfg.PublicIP.Endpoint, 10*time.Second)
+	if err != nil {
+		slog.Warn("public ip check failed", "err", err)
+		return
+	}
+	ts := store.NowUnix()
+	if err := s.db.RecordPublicIPObservation(ctx, ts, res.IP, res.CGNAT); err != nil {
+		slog.Error("record public ip", "err", err)
 	}
 }

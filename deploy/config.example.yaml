@@ -57,3 +57,22 @@ baseline:
 retention:
   raw_days: 7
   rollup_days: 90
+
+# Public IP (WAN) tracking — useful for detecting ISP DHCP renewals that can
+# interrupt tunnels, VPNs, and dynamic DNS. Runs on its own low-frequency
+# schedule and is completely independent of the health state machine.
+# The IP shown is the address the rest of the Internet sees you as.
+# CGNAT note: If the observed IP is in the 100.64.0.0/10 range you are definitely
+# behind Carrier-Grade NAT (inbound connections impossible without ISP help).
+# Even with a normal-looking public IP you may still be behind CGNAT (the
+# 100.64 address lives only on your router's WAN side). This feature reports
+# the externally visible IP and flags the definite cases.
+public_ip:
+  enabled: false
+  interval: 5m
+  # Common free endpoints that return a single plain-text IP address:
+  #   https://api.ipify.org          (IPv4)
+  #   https://api6.ipify.org         (IPv6)
+  #   https://icanhazip.com
+  #   https://ifconfig.me/ip
+  endpoint: "https://api.ipify.org"

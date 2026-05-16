@@ -618,6 +618,25 @@ function renderDevice(deviceId) {
   if (picker) picker.title = deviceId || '';
 }
 
+function renderWAN(pip) {
+  const el = document.getElementById('wan-ip');
+  if (!el) return;
+  if (!pip || !pip.ip) {
+    el.innerHTML = '';
+    el.style.display = 'none';
+    return;
+  }
+  const ago = pip.changed_at ? durationSince(pip.changed_at) : '';
+  let html = `<span class="wan-addr">${pip.ip}</span>`;
+  if (ago) html += `<span class="wan-ago">${ago}</span>`;
+  if (pip.cgnat) html += `<span class="cgnat-badge">CGNAT</span>`;
+  el.innerHTML = html;
+  el.style.display = 'inline-flex';
+  const prev = pip.previous_ip ? ` prev ${pip.previous_ip}` : '';
+  el.title = `Public IP • ${pip.ip}${prev} • click to copy`;
+  el.onclick = () => { if (navigator.clipboard) navigator.clipboard.writeText(pip.ip); };
+}
+
 function setupNav() {
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -1075,6 +1094,7 @@ async function refresh() {
     renderPills(lastStates);
     renderOverall(data);
     renderLearning(data);
+    renderWAN(data.public_ip);
 
     await loadRollupsAndChart();
     await loadIncidents();

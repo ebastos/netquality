@@ -77,6 +77,7 @@ func (h *handlers) status(w http.ResponseWriter, r *http.Request) {
 		Warm         bool                   `json:"warm"`
 		Learning     *learningInfo          `json:"learning,omitempty"`
 		GatewayHost  string                 `json:"gateway_host,omitempty"`
+		PublicIP     *store.PublicIPInfo    `json:"public_ip,omitempty"`
 	}
 	out := resp{
 		DeviceID:     h.srv.cfg.DeviceID,
@@ -91,6 +92,11 @@ func (h *handlers) status(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out.Learning = info
+	}
+	if h.srv.cfg.PublicIP.Enabled {
+		if pip, err := h.srv.db.GetCurrentPublicIP(ctx); err == nil && pip != nil {
+			out.PublicIP = pip
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)

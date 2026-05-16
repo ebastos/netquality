@@ -64,6 +64,23 @@ type Incident struct {
 	DetailJSON   string `json:"detail_json,omitempty"`
 }
 
+// PublicIPChange is one historical public IP observation (used for recent list in status).
+type PublicIPChange struct {
+	Ts         int64  `json:"ts"`
+	IP         string `json:"ip"`
+	PreviousIP string `json:"previous_ip,omitempty"`
+	CGNAT      bool   `json:"cgnat"`
+}
+
+// PublicIPInfo is the current public IP state returned by the API (and stored via meta + changes table).
+type PublicIPInfo struct {
+	IP         string           `json:"ip,omitempty"`
+	ChangedAt  int64            `json:"changed_at,omitempty"`
+	PreviousIP string           `json:"previous_ip,omitempty"`
+	CGNAT      bool             `json:"cgnat"`
+	Recent     []PublicIPChange `json:"recent,omitempty"`
+}
+
 // DB is the SQLite-backed persistence layer for samples, rollups, baselines, states, and incidents.
 type DB struct {
 	db *sql.DB
@@ -488,4 +505,122 @@ func (s *DB) BuildExport(ctx context.Context, deviceID string, inc *Incident) (*
 		Rollups:    rollups,
 		ExportedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
+}
+
+// --- Public IP tracking (meta for current snapshot + public_ip_changes table for history) ---
+
+func (s *DB) getMeta(ctx context.Context, key string) (string, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return v, err
+}
+
+func (s *DB) setMeta(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO meta (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}
+
+func (s *DB) GetCurrentPublicIP(ctx context.Context) (*PublicIPInfo, error) {
+	ip, _ := s.getMeta(ctx, "public_ip_v4")
+	if ip == "" {
+		return nil, nil
+	}
+	changedStr, _ := s.getMeta(ctx, "public_ip_v4_changed")
+	prev, _ := s.getMeta(ctx, "public_ip_v4_prev")
+	cgnatStr, _ := s.getMeta(ctx, "public_ip_v4_cgnat")
+
+	var changed int64
+	if changedStr != "" {
+		// best effort; ignore parse error
+		fmt.Sscan(changedStr, &changed)
+	}
+	cgnat := cgnatStr == "1"
+
+	// fetch up to 5 most recent changes for the response
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT ts, ip, previous_ip, cgnat FROM public_ip_changes
+		ORDER BY ts DESC LIMIT 5`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var recent []PublicIPChange
+	for rows.Next() {
+		var ch PublicIPChange
+		var cgnatInt int
+		var prevIP sql.NullString
+		if err := rows.Scan(&ch.Ts, &ch.IP, &prevIP, &cgnatInt); err != nil {
+			return nil, err
+		}
+		if prevIP.Valid {
+			ch.PreviousIP = prevIP.String
+		}
+		ch.CGNAT = cgnatInt != 0
+		recent = append(recent, ch)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &PublicIPInfo{
+		IP:         ip,
+		ChangedAt:  changed,
+		PreviousIP: prev,
+		CGNAT:      cgnat,
+		Recent:     recent,
+	}, nil
+}
+
+func (s *DB) RecordPublicIPObservation(ctx context.Context, ts int64, ip string, cgnat bool) error {
+	if ip == "" {
+		return nil
+	}
+
+	cur, _ := s.getMeta(ctx, "public_ip_v4")
+	if cur == ip {
+		return nil // no change
+	}
+
+	prev := cur
+	cgnatInt := 0
+	if cgnat {
+		cgnatInt = 1
+	}
+
+	// update current snapshot in meta
+	if err := s.setMeta(ctx, "public_ip_v4", ip); err != nil {
+		return err
+	}
+	if err := s.setMeta(ctx, "public_ip_v4_changed", fmt.Sprintf("%d", ts)); err != nil {
+		return err
+	}
+	if err := s.setMeta(ctx, "public_ip_v4_cgnat", fmt.Sprintf("%d", cgnatInt)); err != nil {
+		return err
+	}
+	if prev != "" {
+		if err := s.setMeta(ctx, "public_ip_v4_prev", prev); err != nil {
+			return err
+		}
+	}
+
+	// record history row
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO public_ip_changes (ts, ip, previous_ip, cgnat) VALUES (?, ?, ?, ?)`,
+		ts, ip, prev, cgnatInt)
+	if err != nil {
+		return err
+	}
+
+	// keep only the most recent 50 changes (history is small; no retention config needed)
+	_, _ = s.db.ExecContext(ctx, `
+		DELETE FROM public_ip_changes
+		WHERE ts NOT IN (SELECT ts FROM public_ip_changes ORDER BY ts DESC LIMIT 50)`)
+
+	return nil
 }

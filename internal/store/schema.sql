@@ -52,3 +52,13 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Public IP change history (append-only, low volume). Survives raw sample pruning.
+CREATE TABLE IF NOT EXISTS public_ip_changes (
+    ts INTEGER NOT NULL,
+    ip TEXT NOT NULL,
+    previous_ip TEXT,
+    cgnat INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (ts)
+);
+CREATE INDEX IF NOT EXISTS idx_public_ip_changes_ts ON public_ip_changes (ts DESC);

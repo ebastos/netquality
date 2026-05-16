@@ -23,7 +23,8 @@ type Config struct {
 	Baseline  BaselineConfig   `yaml:"baseline"`
 	Retention RetentionConfig  `yaml:"retention"`
 
-	ICMP ICMPConfig `yaml:"icmp"`
+	ICMP     ICMPConfig     `yaml:"icmp"`
+	PublicIP PublicIPConfig `yaml:"public_ip"`
 }
 
 type ScheduleConfig struct {
@@ -97,6 +98,12 @@ type RetentionConfig struct {
 type ICMPConfig struct {
 	Count   int      `yaml:"count"`
 	Timeout Duration `yaml:"timeout"`
+}
+
+type PublicIPConfig struct {
+	Enabled  bool     `yaml:"enabled"`
+	Interval Duration `yaml:"interval"`
+	Endpoint string   `yaml:"endpoint"`
 }
 
 // Duration is a YAML-friendly wrapper around time.Duration (parses "1m30s" etc.).
@@ -177,6 +184,7 @@ func (c *Config) applyDefaults() {
 	c.applyBaselineDefaults()
 	c.applyRetentionDefaults()
 	c.applyICMPDefaults()
+	c.applyPublicIPDefaults()
 	c.applyThresholdDefaults()
 }
 
@@ -218,6 +226,12 @@ func (c *Config) applyICMPDefaults() {
 	setDefaultDuration(&c.ICMP.Timeout, Duration(10*time.Second))
 }
 
+func (c *Config) applyPublicIPDefaults() {
+	// enabled defaults to false (zero value) — explicit opt-in
+	setDefaultDuration(&c.PublicIP.Interval, Duration(5*time.Minute))
+	setDefault(&c.PublicIP.Endpoint, "https://api.ipify.org")
+}
+
 func (c *Config) applyThresholdDefaults() {
 	setDefaultPositive(&c.Threshold.Gateway.LossPctDegraded, 2)
 	setDefaultPositive(&c.Threshold.Gateway.LossPctDown, 10)
@@ -233,6 +247,9 @@ func (c *Config) applyThresholdDefaults() {
 func (c *Config) validate() error {
 	if c.Listen == "" {
 		return fmt.Errorf("listen is required")
+	}
+	if c.PublicIP.Enabled && c.PublicIP.Endpoint == "" {
+		return fmt.Errorf("public_ip.endpoint is required when public_ip.enabled is true")
 	}
 	// Gateway.Host may be empty when Enabled=true; auto-detection happens in probe.NewRunner.
 	for i, t := range c.Targets {

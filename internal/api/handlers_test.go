@@ -57,6 +57,9 @@ func TestStatusIncludesLearningWhenNotWarm(t *testing.T) {
 	if learning["warmup_days"] != float64(14) {
 		t.Fatalf("warmup_days %v", learning["warmup_days"])
 	}
+	if _, ok := body["public_ip"]; ok {
+		t.Error("public_ip key must be absent when PublicIP.Enabled is false (default)")
+	}
 }
 
 func TestStatusStatesUseSnakeCase(t *testing.T) {
